@@ -43,7 +43,7 @@ const getPositiveIntegerConfig = (
         username: configService.get<string>('DATABASE_USER', 'root'),
         password: configService.get<string>('DATABASE_PASSWORD', ''),
         database: configService.getOrThrow<string>('DATABASE_NAME'),
-        synchronize: false,
+        synchronize: true,
         dropSchema: false,
         autoLoadEntities: true,
         timezone: configService.get<string>('DATABASE_TIMEZONE', '-06:00'),

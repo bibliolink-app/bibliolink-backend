@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { User } from './user.entity.js';
 import { Repository } from 'typeorm/browser/repository/Repository.js';
@@ -24,7 +24,21 @@ export class UsersService {
     }
 
     async createUser(createUserDto: CreateUserDto) {
-        const user = this.userRepository.create(createUserDto);
+        const RegistereduserName = await this.userRepository.findOne({ where: { userName: createUserDto.userName } });
+        if (RegistereduserName) { throw new BadRequestException('This username is already taken, try another one'); }
+
+        const Registeredemail = await this.userRepository.findOne({ where: { email: createUserDto.email } });
+        if (Registeredemail) { throw new BadRequestException('This email is already registered, try another one'); }
+
+        const newUser = this.userRepository.create(createUserDto);
+        return await this.userRepository.save(newUser);
+    }
+
+    async updateUserStatus(id: number) {
+        const user = await this.userRepository.findOne({ where: { id: id } });
+        if (!user) { throw new BadRequestException('User not found'); }
+
+        user.status = !user.status;
         return await this.userRepository.save(user);
     }
 }

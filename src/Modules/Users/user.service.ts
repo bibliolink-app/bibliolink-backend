@@ -46,7 +46,7 @@ export class UsersService {
     }
 
     async updateUserStatus(id: number) {
-        const user = await this.userRepository.findOne({ where: { id: id } });
+        const user = await this.userRepository.findOne({ where: { userId: id } });
         if (!user) { throw new BadRequestException('User not found'); }
 
         user.status = !user.status;

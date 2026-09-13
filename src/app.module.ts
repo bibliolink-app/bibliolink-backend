@@ -6,6 +6,7 @@ import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { UsersModule } from './Modules/Users/user.module.js';
 import { AppController } from './app.controller.js';
 import { AppService } from './app.service.js';
+import { AuthModule } from './auth/auth.module.js';
 import { BooksModule } from './Modules/Books/book.module.js';
 import { FavoritesModule } from './Modules/Favorites/favorite.module.js';
 import { PaymentModule } from './Modules/Payment/payment.module.js';
@@ -80,6 +81,7 @@ const getPositiveIntegerConfig = (
       ],
     }),
     UsersModule,
+    AuthModule,
     BooksModule,
     FavoritesModule,
     PaymentModule,

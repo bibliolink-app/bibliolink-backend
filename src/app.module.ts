@@ -3,10 +3,14 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { APP_GUARD } from '@nestjs/core';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
-import { UsersModule } from './Users/user.module.js';
+import { UsersModule } from './Modules/Users/user.module.js';
 import { AppController } from './app.controller.js';
 import { AppService } from './app.service.js';
 import { AuthModule } from './auth/auth.module.js';
+import { BooksModule } from './Modules/Books/book.module.js';
+import { FavoritesModule } from './Modules/Favorites/favorite.module.js';
+import { PaymentModule } from './Modules/Payment/payment.module.js';
+import { SubscriptionModule } from './Modules/Subscription/subscription.module.js';
 
 const getPositiveIntegerConfig = (
   configService: ConfigService,
@@ -45,7 +49,7 @@ const getPositiveIntegerConfig = (
         password: configService.get<string>('DATABASE_PASSWORD', ''),
         database: configService.getOrThrow<string>('DATABASE_NAME'),
         synchronize: true,
-        dropSchema: false,
+        dropSchema: true,
         autoLoadEntities: true,
         timezone: configService.get<string>('DATABASE_TIMEZONE', '-06:00'),
         dateStrings: true,
@@ -78,6 +82,10 @@ const getPositiveIntegerConfig = (
     }),
     UsersModule,
     AuthModule,
+    BooksModule,
+    FavoritesModule,
+    PaymentModule,
+    SubscriptionModule,
   ],
 
   controllers: [AppController],

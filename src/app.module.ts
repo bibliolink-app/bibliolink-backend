@@ -1,101 +1,53 @@
 import { Module } from '@nestjs/common';
-import { ConfigModule, ConfigService } from '@nestjs/config';
-import { TypeOrmModule } from '@nestjs/typeorm';
 import { APP_GUARD } from '@nestjs/core';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
-import { UsersModule } from './Modules/Users/user.module.js';
-import { AppController } from './app.controller.js';
-import { AppService } from './app.service.js';
-import { AuthModule } from './auth/auth.module.js';
-import { BooksModule } from './Modules/Books/book.module.js';
-import { FavoritesModule } from './Modules/Favorites/favorite.module.js';
-import { PaymentModule } from './Modules/Payment/payment.module.js';
-import { SubscriptionModule } from './Modules/Subscription/subscription.module.js';
+import { TypeOrmModule } from '@nestjs/typeorm';
 
-const getPositiveIntegerConfig = (
-  configService: ConfigService,
-  key: string,
-  defaultValue: number,
-): number => {
-  const rawValue = configService.get<string>(key);
-
-  if (rawValue === undefined || rawValue.trim() === '') {
-    return defaultValue;
-  }
-
-  const parsedValue = Number(rawValue);
-
-  if (!Number.isInteger(parsedValue) || parsedValue <= 0) {
-    throw new Error(`La variable de entorno ${key} debe ser un número entero positivo.`);
-  }
-
-  return parsedValue;
-};
+import { envs } from './config/envs';
+import { throttlingConfig } from './config/throttling.config';
+import { EmailModule } from './email/email.module';
+import { CatalogsModule } from './catalogs/catalogs.module';
+import { BooksModule } from './books/books.module';
+import { FavoritesModule } from './favorites/favorites.module';
+import { SubscriptionsModule } from './subscriptions/subscriptions.module';
+import { PaymentsModule } from './payments/payments.module';
 
 @Module({
-  imports: [
-    ConfigModule.forRoot({
-      isGlobal: true,
-    }),
+    imports: [
+        TypeOrmModule.forRoot({
+            type: envs.database.type,
+            host: envs.database.host,
+            port: envs.database.port,
+            username: envs.database.user,
+            password: envs.database.password,
+            database: envs.database.name,
+            synchronize: false,
+            autoLoadEntities: true,
+            timezone: 'Z',
+            dateStrings: false,
+        }),
 
-    TypeOrmModule.forRootAsync({
-      imports: [ConfigModule],
-      inject: [ConfigService],
-      useFactory: (configService: ConfigService) => ({
-        type: 'mysql',
-        host: configService.getOrThrow<string>('DATABASE_HOST'),
-        port: getPositiveIntegerConfig(configService, 'DATABASE_PORT', 3306),
-        username: configService.get<string>('DATABASE_USER', 'root'),
-        password: configService.get<string>('DATABASE_PASSWORD', ''),
-        database: configService.getOrThrow<string>('DATABASE_NAME'),
-        synchronize: true,
-        dropSchema: true,
-        autoLoadEntities: true,
-        timezone: configService.get<string>('DATABASE_TIMEZONE', '-06:00'),
-        dateStrings: true,
-      }),
-    }),
-    ThrottlerModule.forRootAsync({
-      imports: [ConfigModule],
-      inject: [ConfigService],
-      useFactory: (configService: ConfigService) => [
-        {
-          ttl: getPositiveIntegerConfig(configService, 'THROTTLE_TTL', 60000),
-          limit: getPositiveIntegerConfig(configService, 'THROTTLE_LIMIT', 100),
-        },
-        {
-          name: 'register',
-          ttl: getPositiveIntegerConfig(configService, 'REGISTER_THROTTLE_TTL', 60000),
-          limit: getPositiveIntegerConfig(configService, 'REGISTER_THROTTLE_LIMIT', 3),
-        },
-        {
-          name: 'login',
-          ttl: getPositiveIntegerConfig(configService, 'LOGIN_THROTTLE_TTL', 60000),
-          limit: getPositiveIntegerConfig(configService, 'LOGIN_THROTTLE_LIMIT', 5),
-        },
-        {
-          name: 'chat',
-          ttl: getPositiveIntegerConfig(configService, 'CHAT_THROTTLE_TTL', 60000),
-          limit: getPositiveIntegerConfig(configService, 'CHAT_THROTTLE_LIMIT', 10),
-        },
-      ],
-    }),
-    UsersModule,
-    AuthModule,
-    BooksModule,
-    FavoritesModule,
-    PaymentModule,
-    SubscriptionModule,
-  ],
+        ThrottlerModule.forRoot(throttlingConfig),
 
-  controllers: [AppController],
-  providers: [
-    AppService,
-    {
-      provide: APP_GUARD,
-      useClass: ThrottlerGuard,
-    },
-  ],
+        EmailModule,
+
+        CatalogsModule,
+
+        BooksModule,
+
+        FavoritesModule,
+
+        SubscriptionsModule,
+
+        PaymentsModule,
+    ],
+
+    providers: [
+        {
+            provide: APP_GUARD,
+            useClass: ThrottlerGuard,
+        },
+    ],
 })
 
 export class AppModule { }

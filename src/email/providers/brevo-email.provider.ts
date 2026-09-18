@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { BrevoClient } from '@getbrevo/brevo';
+import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 
 import { EmailProvider, SendTemplateEmailOptions, } from '../interfaces/email-provider.interface';
 import { envs } from '../../config/envs';
@@ -8,7 +9,10 @@ import { envs } from '../../config/envs';
 export class BrevoEmailProvider implements EmailProvider {
     private readonly client: BrevoClient;
 
-    constructor() {
+    constructor(
+        @InjectPinoLogger(BrevoEmailProvider.name)
+        private readonly logger: PinoLogger,
+    ) {
         // Crea el cliente que se comunicará con la API de Brevo.
         this.client = new BrevoClient({
             apiKey: envs.brevo.apiKey,
@@ -17,6 +21,7 @@ export class BrevoEmailProvider implements EmailProvider {
 
     // Envía un correo utilizando una plantilla configurada en Brevo.
     async sendTemplate(options: SendTemplateEmailOptions): Promise<void> {
+        this.logger.debug('Submitting transactional email to Brevo');
         await this.client.transactionalEmails.sendTransacEmail({
             // Define el remitente configurado para los correos transaccionales.
             sender: {
@@ -35,5 +40,6 @@ export class BrevoEmailProvider implements EmailProvider {
             // Envía los valores dinámicos que utiliza la plantilla.
             params: options.params,
         });
+        this.logger.debug('Brevo accepted transactional email');
     }
 }

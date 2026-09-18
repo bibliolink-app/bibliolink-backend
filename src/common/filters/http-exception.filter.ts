@@ -29,6 +29,11 @@ export class HttpExceptionFilter implements ExceptionFilter {
                 ? exception.getStatus()
                 : HttpStatus.INTERNAL_SERVER_ERROR;
 
+        // pino-http registra el error original una sola vez al finalizar la respuesta.
+        if (statusCode >= HttpStatus.INTERNAL_SERVER_ERROR && exception instanceof Error) {
+            response.err = exception;
+        }
+
         const exceptionResponse =
             exception instanceof HttpException
                 ? exception.getResponse()

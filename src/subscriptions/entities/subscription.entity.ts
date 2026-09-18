@@ -33,10 +33,10 @@ export class Subscription {
     @Column({ name: 'canceled_at', type: 'datetime', precision: 3, nullable: true, })
     canceledAt!: Date | null;
 
-    @CreateDateColumn({ name: 'created_at', type: 'datetime', precision: 3, })
+    @CreateDateColumn({ name: 'created_at', type: 'datetime', precision: 3,  default: () => 'CURRENT_TIMESTAMP(3)',})
     createdAt!: Date;
 
-    @UpdateDateColumn({ name: 'updated_at', type: 'datetime', precision: 3, })
+    @UpdateDateColumn({ name: 'updated_at', type: 'datetime', precision: 3,default: () => 'CURRENT_TIMESTAMP(3)', onUpdate: 'CURRENT_TIMESTAMP(3)', })
     updatedAt!: Date;
 
     @ManyToOne(() => User, { nullable: false, })

@@ -1,67 +1,76 @@
-import { BadRequestException } from '@nestjs/common';
-import { IsEmail, IsOptional, IsString, Matches, MaxLength, ValidateBy } from 'class-validator';
+import { Transform } from 'class-transformer';
+import { IsEmail, IsNotEmpty, IsOptional, IsString, MaxLength, } from 'class-validator';
 
 import { normalizeLocalDate } from '../../common/dates/local-date';
 import { IsStrongPassword } from '../../common/decorators/is-strong-password.decorator';
+import { trimString } from '../../common/transformers/trim-string.transformer';
 
 export class RegisterDto {
-    @IsString()
-    @Matches(/\S/u, { message: 'username no puede estar vacío ni contener solo espacios.' })
-    @MaxLength(25)
-    username: string;
+    @Transform(trimString)
+    @IsString({ message: 'El nombre de usuario debe ser un texto.' })
+    @IsNotEmpty({ message: 'El nombre de usuario es obligatorio.' })
+    @MaxLength(25, {
+        message: 'El nombre de usuario no puede superar los 25 caracteres.',
+    })
+    username!: string;
 
-    @IsString()
-    @Matches(/\S/u, { message: 'firstName no puede estar vacío ni contener solo espacios.' })
-    @MaxLength(50)
-    firstName: string;
+    @Transform(trimString)
+    @IsString({ message: 'El primer nombre debe ser un texto.' })
+    @IsNotEmpty({ message: 'El primer nombre es obligatorio.' })
+    @MaxLength(50, {
+        message: 'El primer nombre no puede superar los 50 caracteres.',
+    })
+    firstName!: string;
 
+    @Transform(trimString)
     @IsOptional()
-    @IsString()
-    @Matches(/\S/u, { message: 'middleName no puede estar vacío ni contener solo espacios.' })
-    @MaxLength(50)
+    @IsString({ message: 'El segundo nombre debe ser un texto.' })
+    @IsNotEmpty({ message: 'El segundo nombre no puede estar vacío.' })
+    @MaxLength(50, {
+        message: 'El segundo nombre no puede superar los 50 caracteres.',
+    })
     middleName?: string | null;
 
-    @IsString()
-    @Matches(/\S/u, { message: 'firstSurname no puede estar vacío ni contener solo espacios.' })
-    @MaxLength(50)
-    firstSurname: string;
+    @Transform(trimString)
+    @IsString({ message: 'El primer apellido debe ser un texto.' })
+    @IsNotEmpty({ message: 'El primer apellido es obligatorio.' })
+    @MaxLength(50, {
+        message: 'El primer apellido no puede superar los 50 caracteres.',
+    })
+    firstSurname!: string;
 
+    @Transform(trimString)
     @IsOptional()
-    @IsString()
-    @Matches(/\S/u, { message: 'secondSurname no puede estar vacío ni contener solo espacios.' })
-    @MaxLength(50)
+    @IsString({ message: 'El segundo apellido debe ser un texto.' })
+    @IsNotEmpty({ message: 'El segundo apellido no puede estar vacío.' })
+    @MaxLength(50, {
+        message: 'El segundo apellido no puede superar los 50 caracteres.',
+    })
     secondSurname?: string | null;
 
-    @IsString()
-    @ValidateBy({
-        name: 'isLocalDate',
-        validator: {
-            validate(value: unknown): boolean {
-                try {
-                    return normalizeLocalDate(value) === value;
-                } catch (error: unknown) {
-                    if (error instanceof BadRequestException) {
-                        return false;
-                    }
-                    throw error;
-                }
-            },
-            defaultMessage: () => 'birthDate debe ser una fecha válida con formato YYYY-MM-DD.',
-        },
+    @Transform(({ value }) => normalizeLocalDate(value))
+    @IsString({
+        message: 'La fecha de nacimiento debe ser un texto.',
     })
-    birthDate: string;
+    birthDate!: string;
 
-    @IsString()
-    @IsEmail()
-    @MaxLength(254)
-    email: string;
+    @Transform(trimString)
+    @IsEmail({}, {
+        message: 'El correo electrónico debe tener un formato válido.',
+    })
+    @MaxLength(254, {
+        message: 'El correo electrónico no puede superar los 254 caracteres.',
+    })
+    email!: string;
 
+    @IsString({ message: 'La contraseña debe ser un texto.' })
     @IsStrongPassword()
-    password: string;
+    password!: string;
 
-    @IsString()
-    @Matches(/\S/u, { message: 'captchaToken no puede estar vacío ni contener solo espacios.' })
-    @MaxLength(4096)
-    captchaToken: string;
+    @IsString({ message: 'El token CAPTCHA debe ser un texto.' })
+    @IsNotEmpty({ message: 'El token CAPTCHA es obligatorio.' })
+    @MaxLength(4096, {
+        message: 'El token CAPTCHA supera la longitud permitida.',
+    })
+    captchaToken!: string;
 }
-

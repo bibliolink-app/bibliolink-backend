@@ -19,7 +19,7 @@ export class PasswordResetToken {
     @Column({ name: 'used_at', type: 'datetime', precision: 3, nullable: true, })
     usedAt!: Date | null;
 
-    @CreateDateColumn({ name: 'created_at', type: 'datetime', precision: 3, })
+    @CreateDateColumn({ name: 'created_at', type: 'datetime', precision: 3,  default: () => 'CURRENT_TIMESTAMP(3)', })
     createdAt!: Date;
 
     @ManyToOne(() => User, { nullable: false, onDelete: 'CASCADE', })

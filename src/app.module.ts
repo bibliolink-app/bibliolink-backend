@@ -2,18 +2,22 @@ import { Module } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { LoggerModule } from 'nestjs-pino';
 
 import { envs } from './config/envs';
 import { throttlingConfig } from './config/throttling.config';
+import { loggingConfig } from './config/logging.config';
 import { EmailModule } from './email/email.module';
 import { CatalogsModule } from './catalogs/catalogs.module';
 import { BooksModule } from './books/books.module';
 import { FavoritesModule } from './favorites/favorites.module';
 import { SubscriptionsModule } from './subscriptions/subscriptions.module';
 import { PaymentsModule } from './payments/payments.module';
+import { AuthModule } from './auth/auth.module';
 
 @Module({
     imports: [
+        LoggerModule.forRoot(loggingConfig),
         TypeOrmModule.forRoot({
             type: envs.database.type,
             host: envs.database.host,
@@ -28,6 +32,7 @@ import { PaymentsModule } from './payments/payments.module';
         }),
 
         ThrottlerModule.forRoot(throttlingConfig),
+        AuthModule,
 
         EmailModule,
 

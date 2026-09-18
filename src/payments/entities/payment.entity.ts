@@ -21,7 +21,7 @@ export class Payment {
     currencyCode!: string;
 
 
-    @CreateDateColumn({ name: 'created_at', type: 'datetime', precision: 3, })
+    @CreateDateColumn({ name: 'created_at', type: 'datetime', precision: 3,  default: () => 'CURRENT_TIMESTAMP(3)', })
     createdAt!: Date;
 
     @Column({ name: 'paid_at', type: 'datetime', precision: 3, })

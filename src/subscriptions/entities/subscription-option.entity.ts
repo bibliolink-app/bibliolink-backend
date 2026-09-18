@@ -22,9 +22,9 @@ export class SubscriptionOption {
     @Column({ type: 'boolean', default: true, })
     active!: boolean;
 
-    @CreateDateColumn({ name: 'created_at', type: 'datetime', precision: 3, })
+    @CreateDateColumn({ name: 'created_at', type: 'datetime', precision: 3,  default: () => 'CURRENT_TIMESTAMP(3)',})
     createdAt!: Date;
 
-    @UpdateDateColumn({ name: 'updated_at', type: 'datetime', precision: 3, })
+    @UpdateDateColumn({ name: 'updated_at', type: 'datetime', precision: 3,  default: () => 'CURRENT_TIMESTAMP(3)', onUpdate: 'CURRENT_TIMESTAMP(3)',})
     updatedAt!: Date;
 }

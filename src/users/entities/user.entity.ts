@@ -8,15 +8,6 @@ export class User {
     @PrimaryGeneratedColumn({ name: 'user_id', type: 'int', unsigned: true,})
     userId!: number;
 
-    /*@OneToMany(() => Favorite, (favorite) => favorite.user)
-favorites!: Favorite[];
-
-@OneToMany(() => Subscription, (subscription) => subscription.user)
-subscriptions!: Subscription[];
-
-@OneToMany(() => PasswordResetToken, (token) => token.user)
-passwordResetTokens!: PasswordResetToken[];*/
-
     @Column({ type: 'varchar', length: 25, unique: true, })
     username!: string;
 
@@ -47,9 +38,9 @@ passwordResetTokens!: PasswordResetToken[];*/
     @Column({ type: 'enum', enum: UserStatus, default: UserStatus.ACTIVE, })
     status!: UserStatus;
 
-    @CreateDateColumn({ name: 'created_at', type: 'datetime', precision: 3, })
+    @CreateDateColumn({ name: 'created_at', type: 'datetime', precision: 3, default: () => 'CURRENT_TIMESTAMP(3)', })
     createdAt!: Date;
 
-    @UpdateDateColumn({ name: 'updated_at', type: 'datetime', precision: 3, })
+    @UpdateDateColumn({ name: 'updated_at', type: 'datetime', precision: 3, default: () => 'CURRENT_TIMESTAMP(3)', onUpdate: 'CURRENT_TIMESTAMP(3)', })
     updatedAt!: Date;
 }

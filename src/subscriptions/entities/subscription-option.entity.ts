@@ -1,14 +1,10 @@
 import { Column, CreateDateColumn, Entity, PrimaryGeneratedColumn, UpdateDateColumn, } from 'typeorm';
 
-import { PaymentMethod } from '../enums/payment-method.enum';
-
 @Entity({ name: 'subscription_options' })
 export class SubscriptionOption {
     @PrimaryGeneratedColumn({ name: 'subscription_option_id', type: 'smallint', unsigned: true, })
     subscriptionOptionId!: number;
 
-    @Column({ name: 'payment_method', type: 'enum', enum: PaymentMethod, })
-    paymentMethod!: PaymentMethod;
 
     @Column({ name: 'currency_code', type: 'char', length: 3, })
     currencyCode!: string;

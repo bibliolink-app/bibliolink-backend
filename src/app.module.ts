@@ -14,6 +14,8 @@ import { FavoritesModule } from './favorites/favorites.module';
 import { SubscriptionsModule } from './subscriptions/subscriptions.module';
 import { AuthModule } from './auth/auth.module';
 import { PaymentTransactionsModule } from './payment_transactions/payment_transactions.module';
+import { AdsModule } from './ads/ads.module';
+import { ReadingModule } from './reading/reading.module';
 
 @Module({
     imports: [
@@ -46,6 +48,12 @@ import { PaymentTransactionsModule } from './payment_transactions/payment_transa
 
         
         PaymentTransactionsModule,
+
+        
+        AdsModule,
+
+        
+        ReadingModule,
     ],
 
     providers: [

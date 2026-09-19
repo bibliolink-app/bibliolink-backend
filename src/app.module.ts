@@ -25,7 +25,7 @@ import { PaymentTransactionsModule } from './payment_transactions/payment_transa
             username: envs.database.user,
             password: envs.database.password,
             database: envs.database.name,
-            synchronize: true,
+            synchronize: false,
             autoLoadEntities: true,
             timezone: 'Z',
             dateStrings: false,

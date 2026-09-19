@@ -12,8 +12,8 @@ import { CatalogsModule } from './catalogs/catalogs.module';
 import { BooksModule } from './books/books.module';
 import { FavoritesModule } from './favorites/favorites.module';
 import { SubscriptionsModule } from './subscriptions/subscriptions.module';
-import { PaymentsModule } from './payments/payments.module';
 import { AuthModule } from './auth/auth.module';
+import { PaymentTransactionsModule } from './payment_transactions/payment_transactions.module';
 
 @Module({
     imports: [
@@ -25,7 +25,7 @@ import { AuthModule } from './auth/auth.module';
             username: envs.database.user,
             password: envs.database.password,
             database: envs.database.name,
-            synchronize: false,
+            synchronize: true,
             autoLoadEntities: true,
             timezone: 'Z',
             dateStrings: false,
@@ -44,7 +44,8 @@ import { AuthModule } from './auth/auth.module';
 
         SubscriptionsModule,
 
-        PaymentsModule,
+        
+        PaymentTransactionsModule,
     ],
 
     providers: [

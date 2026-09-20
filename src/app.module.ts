@@ -16,6 +16,7 @@ import { AuthModule } from './auth/auth.module';
 import { PaymentTransactionsModule } from './payment_transactions/payment_transactions.module';
 import { AdsModule } from './ads/ads.module';
 import { ReadingModule } from './reading/reading.module';
+import { SeedModule } from './seed/seed.module';
 
 @Module({
     imports: [
@@ -49,7 +50,7 @@ import { ReadingModule } from './reading/reading.module';
         
         PaymentTransactionsModule,
 
-        
+        SeedModule,
         AdsModule,
 
         

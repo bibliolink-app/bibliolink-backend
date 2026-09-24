@@ -1,34 +1,79 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete } from '@nestjs/common';
+import {
+    BadRequestException,
+    Body,
+    Controller,
+    HttpCode,
+    HttpStatus,
+    Post,
+    Req,
+    UseGuards,
+} from '@nestjs/common';
+
+import type { RawBodyRequest } from '@nestjs/common';
+import type { Request } from 'express';
+
+import type {
+    AuthenticatedUser,
+} from '../auth/interfaces/authenticated-user.interface';
+
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+
+import { ConfirmSubscriptionDto } from './dto/confirm-subscription.dto';
+
 import { SubscriptionsService } from './subscriptions.service';
-import { CreateSubscriptionDto } from './dto/create-subscription.dto';
-import { UpdateSubscriptionDto } from './dto/update-subscription.dto';
+import {  SkipThrottle, } from '@nestjs/throttler';
+
+type AuthenticatedRequest = Request & {
+    user: AuthenticatedUser;
+};
 
 @Controller('subscriptions')
 export class SubscriptionsController {
-  constructor(private readonly subscriptionsService: SubscriptionsService) {}
+    constructor(
+        private readonly subscriptionsService: SubscriptionsService,
+    ) { }
 
-  @Post()
-  create(@Body() createSubscriptionDto: CreateSubscriptionDto) {
-    return this.subscriptionsService.create(createSubscriptionDto);
-  }
+    // 1. Crear la reserva interna de suscripción.
+    @Post()
+    @UseGuards(JwtAuthGuard)
+    
+    async reserveSubscription(
+        @Req() request: AuthenticatedRequest,
+    ): Promise<{
+        subscriptionId: number;
+        checkoutReference: string;
+    }> {
+        return this.subscriptionsService.reservePendingSubscription(
+            request.user.userId,
+        );
+    }
 
-  @Get()
-  findAll() {
-    return this.subscriptionsService.findAll();
-  }
+    // 2. Vincular la suscripción aprobada en PayPal.
+    @Post('confirm')
+    @HttpCode(HttpStatus.NO_CONTENT)
+    @UseGuards(JwtAuthGuard)
+    async confirmSubscription(@Req() request: AuthenticatedRequest, @Body() dto: ConfirmSubscriptionDto,): Promise<void> {
+        await this.subscriptionsService.linkApprovedSubscription(
+            request.user.userId,
+            dto.subscriptionId,
+            dto.externalSubscriptionReference,
+        );
+    }
 
-  @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.subscriptionsService.findOne(+id);
-  }
+    // 3. Recibir las notificaciones de PayPal.
+    @Post('webhooks/paypal')
+    @HttpCode(HttpStatus.NO_CONTENT)
+    @SkipThrottle()
+    async receivePayPalWebhook(@Req() request: RawBodyRequest<Request>,): Promise<void> {
+        if (!request.rawBody?.length) {
+            throw new BadRequestException(
+                'El cuerpo de la notificación está vacío.',
+            );
+        }
 
-  @Patch(':id')
-  update(@Param('id') id: string, @Body() updateSubscriptionDto: UpdateSubscriptionDto) {
-    return this.subscriptionsService.update(+id, updateSubscriptionDto);
-  }
-
-  @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.subscriptionsService.remove(+id);
-  }
+        await this.subscriptionsService.processPaymentWebhook({
+            rawBody: request.rawBody,
+            headers: request.headers,
+        });
+    }
 }

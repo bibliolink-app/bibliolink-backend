@@ -1,26 +1,70 @@
 import { Injectable } from '@nestjs/common';
-import { CreatePaymentTransactionDto } from './dto/create-payment_transaction.dto';
-import { UpdatePaymentTransactionDto } from './dto/update-payment_transaction.dto';
+import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
+import { EntityManager } from 'typeorm';
+
+import { PaymentTransaction } from './entities/payment_transaction.entity';
+import { PaymentTransactionStatus } from './enums/payment-transaction-status.enum';
+import type { RecordSuccessfulPayment } from './interfaces/record-successful-payment.interface';
 
 @Injectable()
 export class PaymentTransactionsService {
-  create(createPaymentTransactionDto: CreatePaymentTransactionDto) {
-    return 'This action adds a new paymentTransaction';
-  }
+    constructor(
+        @InjectPinoLogger(PaymentTransactionsService.name)
+        private readonly logger: PinoLogger,
+    ) {}
 
-  findAll() {
-    return `This action returns all paymentTransactions`;
-  }
+    async recordSuccessfulPayment( manager: EntityManager, input: RecordSuccessfulPayment, ): Promise<PaymentTransaction> {
+        const repository = manager.getRepository(PaymentTransaction);
 
-  findOne(id: number) {
-    return `This action returns a #${id} paymentTransaction`;
-  }
+        const existingPayment = await repository.findOne({
+            where: {
+                subscriptionId: input.subscriptionId,
+                externalReference: input.externalReference,
+            },
+        });
 
-  update(id: number, updatePaymentTransactionDto: UpdatePaymentTransactionDto) {
-    return `This action updates a #${id} paymentTransaction`;
-  }
+        if (existingPayment) {
+            if (
+                existingPayment.status !== PaymentTransactionStatus.SUCCEEDED ||
+                existingPayment.amount !== input.amount ||
+                existingPayment.currencyCode !== input.currencyCode
+            ) {
+                throw new Error(
+                    'El pago existente no coincide con el pago confirmado.',
+                );
+            }
 
-  remove(id: number) {
-    return `This action removes a #${id} paymentTransaction`;
-  }
+            this.logger.debug(
+                {
+                    paymentTransactionId:
+                        existingPayment.paymentTransactionId,
+                },
+                'Pago confirmado previamente registrado',
+            );
+
+            return existingPayment;
+        }
+
+        const payment = repository.create({
+            subscriptionId: input.subscriptionId,
+            externalReference: input.externalReference,
+            status: PaymentTransactionStatus.SUCCEEDED,
+            amount: input.amount,
+            currencyCode: input.currencyCode,
+            paidAt: input.paidAt,
+        });
+
+        const savedPayment = await repository.save(payment);
+
+        this.logger.debug(
+            {
+                paymentTransactionId:
+                    savedPayment.paymentTransactionId,
+                subscriptionId: input.subscriptionId,
+            },
+            'Pago confirmado registrado',
+        );
+
+        return savedPayment;
+    }
 }

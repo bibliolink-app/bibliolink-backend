@@ -8,7 +8,7 @@ import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { envs } from './config/envs';
 
 async function bootstrap(): Promise<void> {
-    const app = await NestFactory.create(AppModule, { bufferLogs: true });
+    const app = await NestFactory.create(AppModule, { bufferLogs: true, rawBody: true, });
     app.useLogger(app.get(Logger));
     app.use(cookieParser());
 

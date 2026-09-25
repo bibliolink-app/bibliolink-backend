@@ -10,6 +10,8 @@ import { PAYMENT_PROVIDER } from './interfaces/payment-provider.interface';
 import { PayPalProvider } from './providers/paypal.provider';
 import { SubscriptionsController } from './subscriptions.controller';
 import { SubscriptionsService } from './subscriptions.service';
+import { SubscriptionEventStream } from './events/subscription-event-stream.service';
+import { SubscriptionEventsController } from './subscription-events.controller';
 
 @Module({
     imports: [
@@ -23,10 +25,12 @@ import { SubscriptionsService } from './subscriptions.service';
     ],
     controllers: [
         SubscriptionsController,
+        SubscriptionEventsController,
     ],
     providers: [
         SubscriptionsService,
         PayPalProvider,
+        SubscriptionEventStream,
         {
             provide: PAYMENT_PROVIDER,
             useExisting: PayPalProvider,

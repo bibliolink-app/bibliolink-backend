@@ -23,6 +23,7 @@ import { SubscriptionEventsController } from './subscription-events.controller';
             defaultStrategy: 'jwt',
         }),
     ],
+    exports: [SubscriptionsService],
     controllers: [
         SubscriptionsController,
         SubscriptionEventsController,

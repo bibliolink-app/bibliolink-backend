@@ -2,9 +2,11 @@ import { BadRequestException, ConflictException, ForbiddenException, Inject, Inj
 import { InjectRepository } from '@nestjs/typeorm';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { In, MoreThan, Repository } from 'typeorm';
+import type { EntityManager } from 'typeorm';
 
 import { User } from '../users/entities/user.entity';
 import { UserStatus } from '../users/enums/user-status.enum';
+import { UserRole } from '../users/enums/user-role.enum';
 import { Subscription } from './entities/subscription.entity';
 import { SubscriptionStatus } from './enums/subscription-status.enum';
 import { PAYMENT_PROVIDER, type PaymentProvider, } from './interfaces/payment-provider.interface';
@@ -40,6 +42,18 @@ export class SubscriptionsService {
     @InjectPinoLogger(SubscriptionsService.name)
     private readonly logger: PinoLogger,
   ) { }
+
+  async countActiveSubscribers(manager?: EntityManager): Promise<number> {
+    const repository = manager ? manager.getRepository(Subscription) : this.subscriptionRepository;
+    const result = await repository.createQueryBuilder('subscription')
+      .innerJoin('subscription.user', 'user')
+      .select('COUNT(DISTINCT subscription.userId)', 'users')
+      .where('subscription.status = :status', { status: SubscriptionStatus.ACTIVE })
+      .andWhere('user.role = :role', { role: UserRole.USER })
+      .getRawOne<{ users: string | number }>();
+
+    return Number(result?.users ?? 0);
+  }
 
   //Crea la reserva local PENDING para el usuario autenticado.
   async reservePendingSubscription(

@@ -17,6 +17,8 @@ import { SubscriptionPaymentEvent } from './interfaces/subscription-payment-even
 import { envs } from '../config/envs';
 
 import { createSubscriptionCheckoutReference, getSubscriptionIdFromCheckoutReference, verifySubscriptionCheckoutReference, } from './utils/subscription-checkout-reference.util';
+import { SubscriptionEventStream } from './events/subscription-event-stream.service';
+import { SubscriptionActivatedEvent, SubscriptionCanceledEvent } from './events/subscription-activated.event';
 
 const PAYMENT_TIME_TOLERANCE_MS = 5 * 60 * 1000;
 const PRO_MONTHLY_AMOUNT_CENTS = 500;
@@ -32,6 +34,8 @@ export class SubscriptionsService {
     private readonly paymentProvider: PaymentProvider,
 
     private readonly paymentTransactionsService: PaymentTransactionsService,
+
+    private readonly subscriptionEventStream: SubscriptionEventStream,
 
     @InjectPinoLogger(SubscriptionsService.name)
     private readonly logger: PinoLogger,
@@ -273,196 +277,259 @@ export class SubscriptionsService {
   }
 
   //Actualizan nuestra información de manera transaccional.
-  async confirmSuccessfulPayment(input: ConfirmedSubscriptionPayment,): Promise<void> {
+ async confirmSuccessfulPayment( input: ConfirmedSubscriptionPayment, ): Promise<void> {
     if (
-      !input.externalSubscriptionReference ||
-      !input.externalPaymentReference ||
-      !Number.isFinite(input.paidAt.getTime()) ||
-      !Number.isFinite(input.periodStart.getTime()) ||
-      !Number.isFinite(input.periodEnd.getTime()) ||
-      input.periodEnd <= input.periodStart
+        !input.externalSubscriptionReference ||
+        !input.externalPaymentReference ||
+        !Number.isFinite(input.paidAt.getTime()) ||
+        !Number.isFinite(input.periodStart.getTime()) ||
+        !Number.isFinite(input.periodEnd.getTime()) ||
+        input.periodEnd <= input.periodStart
     ) {
-      throw new Error(
-        'Los datos del pago confirmado son inválidos.',
-      );
+        throw new Error(
+            'Los datos del pago confirmado son inválidos.',
+        );
     }
 
     const amountParts =
-      /^(\d+)(?:\.(\d{1,2}))?$/.exec(input.amount);
+        /^(\d+)(?:\.(\d{1,2}))?$/.exec(input.amount);
 
     if (!amountParts) {
-      throw new UnprocessableEntityException(
-        'El importe del pago confirmado es inválido.',
-      );
+        throw new UnprocessableEntityException(
+            'El importe del pago confirmado es inválido.',
+        );
     }
 
     const amountCents =
-      Number(amountParts[1]) * 100 +
-      Number((amountParts[2] ?? '').padEnd(2, '0'));
+        Number(amountParts[1]) * 100 +
+        Number((amountParts[2] ?? '').padEnd(2, '0'));
 
     if (
-      !Number.isSafeInteger(amountCents) ||
-      amountCents !== PRO_MONTHLY_AMOUNT_CENTS ||
-      input.currencyCode !== PRO_CURRENCY_CODE
+        !Number.isSafeInteger(amountCents) ||
+        amountCents !== PRO_MONTHLY_AMOUNT_CENTS ||
+        input.currencyCode !== PRO_CURRENCY_CODE
     ) {
-      throw new UnprocessableEntityException(
-        'El pago no corresponde al importe del plan BiblioLink Pro.',
-      );
+        throw new UnprocessableEntityException(
+            'El pago no corresponde al importe del plan BiblioLink Pro.',
+        );
     }
 
-    await this.subscriptionRepository.manager.transaction(
-      async (manager) => {
-        const subscriptionRepository =
-          manager.getRepository(Subscription);
+    const activationEvent = await this.subscriptionRepository.manager.transaction<SubscriptionActivatedEvent | null>(async (manager) => {
+            const subscriptionRepository = manager.getRepository(Subscription);
 
-        const paymentRepository =
-          manager.getRepository(PaymentTransaction);
+            const paymentRepository =  manager.getRepository(PaymentTransaction);
 
-        // Bloqueamos la suscripción para procesar sus pagos
-        // de manera ordenada.
-        const subscription = await subscriptionRepository
-          .createQueryBuilder('subscription')
-          .setLock('pessimistic_write')
-          .where(
-            'subscription.externalSubscriptionReference = :reference',
-            {
-              reference:
-                input.externalSubscriptionReference,
-            },
-          )
-          .getOne();
+            // Bloqueamos la suscripción para que dos webhooks concurrentes
+            // no modifiquen el mismo período al mismo tiempo.
+            const subscription = await subscriptionRepository
+                .createQueryBuilder('subscription')
+                .setLock('pessimistic_write')
+                .where(
+                    'subscription.externalSubscriptionReference = :reference',
+                    {
+                        reference:
+                            input.externalSubscriptionReference,
+                    },
+                )
+                .getOne();
 
-        if (!subscription) {
-          throw new Error(
-            'No se encontró la suscripción asociada al pago.',
-          );
-        }
+            if (!subscription) {
+                throw new Error(
+                    'No se encontró la suscripción asociada al pago.',
+                );
+            }
 
-        // Comprobamos si este cobro ya fue registrado.
-        const existingPayment =
-          await paymentRepository.findOne({
-            where: {
-              subscriptionId:
-                subscription.subscriptionId,
-              externalReference:
-                input.externalPaymentReference,
-            },
-          });
+            // Necesitamos saber el estado anterior para publicar SSE
+            // solamente cuando realmente ocurra PENDING -> ACTIVE.
+            const wasPending = subscription.status === SubscriptionStatus.PENDING;
 
-        if (existingPayment) {
-          // También comprobamos que los datos del pago
-          // repetido coincidan con el registro existente.
-          await this.paymentTransactionsService
-            .recordSuccessfulPayment(manager, {
-              subscriptionId:
-                subscription.subscriptionId,
-              externalReference:
-                input.externalPaymentReference,
-              amount: input.amount,
-              currencyCode: input.currencyCode,
-              paidAt: input.paidAt,
-            });
+            // Verificamos si el cobro ya fue procesado.
+            const existingPayment =
+                await paymentRepository.findOne({
+                    where: {
+                        subscriptionId:
+                            subscription.subscriptionId,
+                        externalReference:
+                            input.externalPaymentReference,
+                    },
+                });
 
-          return;
-        }
+            if (existingPayment) {
+                // El servicio valida que un webhook duplicado
+                // coincida con el pago que ya tenemos registrado.
+                await this.paymentTransactionsService
+                    .recordSuccessfulPayment(manager, {
+                        subscriptionId:
+                            subscription.subscriptionId,
+                        externalReference:
+                            input.externalPaymentReference,
+                        amount: input.amount,
+                        currencyCode: input.currencyCode,
+                        paidAt: input.paidAt,
+                    });
 
-        // Registramos el cobro en el historial.
-        await this.paymentTransactionsService
-          .recordSuccessfulPayment(manager, {
-            subscriptionId:
-              subscription.subscriptionId,
-            externalReference:
-              input.externalPaymentReference,
-            amount: input.amount,
-            currencyCode: input.currencyCode,
-            paidAt: input.paidAt,
-          });
+                // No volvemos a emitir el evento SSE.
+                return null;
+            }
 
-        // Un evento antiguo no debe reducir una vigencia
-        // que ya fue ampliada por un pago posterior.
-        const extendsCurrentPeriod =
-          !subscription.currentPeriodEnd ||
-          input.periodEnd > subscription.currentPeriodEnd;
+            // Registramos el cobro.
+            await this.paymentTransactionsService
+                .recordSuccessfulPayment(manager, {
+                    subscriptionId:
+                        subscription.subscriptionId,
+                    externalReference:
+                        input.externalPaymentReference,
+                    amount: input.amount,
+                    currencyCode: input.currencyCode,
+                    paidAt: input.paidAt,
+                });
 
-        if (!extendsCurrentPeriod) {
-          return;
-        }
+            // Un webhook antiguo no debe reducir una vigencia
+            // que ya fue extendida por un pago posterior.
+            const extendsCurrentPeriod =
+                !subscription.currentPeriodEnd ||
+                input.periodEnd > subscription.currentPeriodEnd;
 
-        subscription.currentPeriodStart =
-          input.periodStart;
+            if (!extendsCurrentPeriod) {
+                return null;
+            }
 
-        subscription.currentPeriodEnd =
-          input.periodEnd;
+            subscription.currentPeriodStart =
+                input.periodStart;
 
-        if (!subscription.startedAt) {
-          subscription.startedAt =
-            input.periodStart;
-        }
+            subscription.currentPeriodEnd =
+                input.periodEnd;
 
-        // Una cancelación no debe revertirse por recibir
-        // posteriormente un evento de pago atrasado.
-        if (
-          subscription.status !==
-          SubscriptionStatus.CANCELED &&
-          subscription.status !==
-          SubscriptionStatus.EXPIRED &&
-          input.periodEnd > new Date()
-        ) {
-          subscription.status =
-            SubscriptionStatus.ACTIVE;
-        }
+            if (!subscription.startedAt) {
+                subscription.startedAt =
+                    input.periodStart;
+            }
 
-        await subscriptionRepository.save(
-          subscription,
+            // Un webhook de pago atrasado no debe reactivar
+            // una suscripción cancelada o expirada.
+            if (
+                subscription.status !==
+                    SubscriptionStatus.CANCELED &&
+                subscription.status !==
+                    SubscriptionStatus.EXPIRED &&
+                input.periodEnd > new Date()
+            ) {
+                subscription.status =
+                    SubscriptionStatus.ACTIVE;
+            }
+
+            await subscriptionRepository.save(subscription);
+
+            // Renovaciones ACTIVE -> ACTIVE no deben provocar
+            // nuevamente "tu suscripción fue activada".
+            if (
+                !wasPending ||
+                subscription.status !==
+                    SubscriptionStatus.ACTIVE
+            ) {
+                return null;
+            }
+
+            return {
+                userId: subscription.userId,
+                subscriptionId:
+                    subscription.subscriptionId,
+                currentPeriodEnd:
+                    subscription.currentPeriodEnd,
+            };
+        });
+
+    // Si llegamos aquí, la transacción ya terminó correctamente.
+    // Por eso recién ahora notificamos por SSE.
+    if (activationEvent) {
+        this.subscriptionEventStream.publishActivation(
+            activationEvent,
         );
-      },
-    );
+    }
+}
+
+  async registerSubscriptionCancellation( externalSubscriptionReference: string, ): Promise<void> {
+  const cancellationEvent =
+    await this.subscriptionRepository.manager.transaction<SubscriptionCanceledEvent | null>(async (manager) => {
+      const repository = manager.getRepository(Subscription);
+
+      const subscription = await repository
+        .createQueryBuilder('subscription')
+        .setLock('pessimistic_write')
+        .where(
+          'subscription.externalSubscriptionReference = :reference',
+          { reference: externalSubscriptionReference },
+        )
+        .getOne();
+
+      if (!subscription) {
+        throw new NotFoundException(
+          'No se encontró la suscripción asociada a la cancelación.',
+        );
+      }
+
+      // Webhook repetido: no modificamos ni notificamos nuevamente.
+      if (subscription.status === SubscriptionStatus.CANCELED) {
+        return null;
+      }
+
+      // Un evento atrasado no debe cambiar una suscripción expirada.
+      if (subscription.status === SubscriptionStatus.EXPIRED) {
+        return null;
+      }
+
+      subscription.status = SubscriptionStatus.CANCELED;
+      subscription.canceledAt = new Date();
+
+      await repository.save(subscription);
+
+      return {
+        userId: subscription.userId,
+        subscriptionId: subscription.subscriptionId,
+        currentPeriodEnd: subscription.currentPeriodEnd,
+      };
+    });
+
+  // La transacción ya hizo COMMIT.
+  if (!cancellationEvent) {
+    return;
   }
 
-  async registerSubscriptionCancellation(externalSubscriptionReference: string,): Promise<void> {
-    await this.subscriptionRepository.manager.transaction(
-      async (manager) => {
-        const repository = manager.getRepository(Subscription);
+  this.subscriptionEventStream.publishCancellation(
+    cancellationEvent,
+  );
 
-        const subscription = await repository
-          .createQueryBuilder('subscription')
-          .setLock('pessimistic_write')
-          .where(
-            'subscription.externalSubscriptionReference = :reference',
-            { reference: externalSubscriptionReference },
-          )
-          .getOne();
+  this.logger.debug(
+    {
+      subscriptionId: cancellationEvent.subscriptionId,
+      userId: cancellationEvent.userId,
+      externalSubscriptionReference,
+    },
+    'Cancelación de suscripción registrada',
+  );
+}
 
-        if (!subscription) {
-          throw new NotFoundException(
-            'No se encontró la suscripción asociada a la cancelación.',
-          );
-        }
+  async hasPremiumAccess(userId: number): Promise<boolean> {
+    const now = new Date();
 
-        // Una notificación repetida no debe modificar nuevamente
-        // una cancelación que ya fue registrada.
-        if (subscription.status === SubscriptionStatus.CANCELED) {
-          return;
-        }
+    const subscription = await this.subscriptionRepository.findOne({
+      where: [
+        {
+          userId,
+          status: SubscriptionStatus.ACTIVE,
+          currentPeriodEnd: MoreThan(now),
+        },
+        {
+          userId,
+          status: SubscriptionStatus.CANCELED,
+          currentPeriodEnd: MoreThan(now),
+        },
+      ],
+    });
 
-        // Una notificación atrasada no debe modificar
-        // una suscripción que ya terminó su vigencia.
-        if (subscription.status === SubscriptionStatus.EXPIRED) {
-          return;
-        }
-
-        subscription.status = SubscriptionStatus.CANCELED;
-        subscription.canceledAt = new Date();
-
-        await repository.save(subscription);
-      },
-    );
-
-    this.logger.debug(
-      { externalSubscriptionReference },
-      'Cancelación de suscripción registrada',
-    );
+    return subscription !== null;
   }
+
 
   private async ensureWebhookSubscriptionLinked(
     externalSubscriptionReference: string,

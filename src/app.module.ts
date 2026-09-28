@@ -37,24 +37,14 @@ import { AnalyticsModule } from './analytics/analytics.module';
 
         ThrottlerModule.forRoot(throttlingConfig),
         AuthModule,
-
         EmailModule,
-
         CatalogsModule,
-
         BooksModule,
-
         FavoritesModule,
-
         SubscriptionsModule,
-
-        
         PaymentTransactionsModule,
-
         SeedModule,
         AdsModule,
-
-        
         ReadingModule,
         AnalyticsModule,
     ],

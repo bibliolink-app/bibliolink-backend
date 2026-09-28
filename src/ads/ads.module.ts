@@ -1,9 +1,16 @@
 import { Module } from '@nestjs/common';
+
 import { AdsService } from './ads.service';
-import { AdsController } from './ads.controller';
+import { TypeOrmModule } from '@nestjs/typeorm';
+import { AdRewardChallenge } from './entities/ad-reward-challenge.entity';
 
 @Module({
-  controllers: [AdsController],
-  providers: [AdsService],
+  imports: [
+        TypeOrmModule.forFeature([
+            AdRewardChallenge,
+        ]),
+    ],
+    providers: [AdsService],
+    exports: [AdsService],
 })
 export class AdsModule {}

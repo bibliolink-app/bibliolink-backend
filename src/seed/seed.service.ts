@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { DataSource } from 'typeorm';
 
+import { CatalogsService } from '../catalogs/catalogs.service';
 import { PasswordHasherService } from '../common/security/password-hasher.service';
 import { UserRole } from '../users/enums/user-role.enum';
 import { User } from '../users/entities/user.entity';
@@ -19,10 +20,15 @@ export class SeedService {
         private readonly dataSource: DataSource,
 
         private readonly passwordHasherService: PasswordHasherService,
+
+        private readonly catalogsService: CatalogsService,
     ) { }
 
     // Crea los datos mínimos que el sistema necesita para comenzar a usarse.
     async run(): Promise<void> {
+        // Registra los proveedores externos de contenido del catálogo.
+        await this.catalogsService.seedProviders();
+
         // Obtiene de las variables de entorno el correo del Root_admin inicial.
         const email =
             this.configService.getOrThrow<string>(

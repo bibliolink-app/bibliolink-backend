@@ -47,13 +47,12 @@ import { SeedModule } from './seed/seed.module';
 
         SubscriptionsModule,
 
-        
         PaymentTransactionsModule,
 
         SeedModule,
+
         AdsModule,
 
-        
         ReadingModule,
     ],
 

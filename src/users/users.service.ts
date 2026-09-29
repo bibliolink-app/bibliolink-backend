@@ -13,7 +13,9 @@ import { UserProfileResponseDto } from './dto/user-profile-response.dto';
 import { User } from './entities/user.entity';
 import { UserRole } from './enums/user-role.enum';
 import { UserStatus } from './enums/user-status.enum';
+import { type UserRegistrations } from './interfaces/user-registrations.interface';
 import { isMySqlUniqueViolation } from '../common/databases/is-mysql-unique-violation';
+import { RegistrationPeriod } from './enums/registration-period.enum';
 
 @Injectable()
 export class UsersService {
@@ -25,6 +27,32 @@ export class UsersService {
 
         private readonly passwordHasher: PasswordHasherService,
     ) { }
+
+    countRegisteredUsers(manager?: EntityManager): Promise<number> {
+        const repository = manager ? manager.getRepository(User) : this.usersRepository;
+        return repository.createQueryBuilder('user')
+            .where('user.role = :role', { role: UserRole.USER })
+            .getCount();
+    }
+
+    async getRegistrationsByPeriod(period: RegistrationPeriod): Promise<UserRegistrations[]> {
+        // DATETIME conserva la fecha almacenada; no aplicar la zona horaria local de Node.
+        const expressions: Record<RegistrationPeriod, string> = {
+            [RegistrationPeriod.DAY]: "DATE_FORMAT(user.createdAt, '%Y-%m-%d')",
+            [RegistrationPeriod.WEEK]: "DATE_FORMAT(DATE_SUB(user.createdAt, INTERVAL WEEKDAY(user.createdAt) DAY), '%Y-%m-%d')",
+            [RegistrationPeriod.MONTH]: "DATE_FORMAT(user.createdAt, '%Y-%m-01')",
+        };
+        const expression = expressions[period];
+        const rows = await this.usersRepository.createQueryBuilder('user')
+            .select(expression, 'period')
+            .addSelect('COUNT(*)', 'users')
+            .where('user.role = :role', { role: UserRole.USER })
+            .groupBy(expression)
+            .orderBy('period', 'ASC')
+            .getRawMany<{ period: string; users: string | number }>();
+
+        return rows.map((row) => ({ period: row.period, users: Number(row.users) }));
+    }
 
     findByEmail(email: string): Promise<User | null> {
         this.logger.debug('Looking up user by email');

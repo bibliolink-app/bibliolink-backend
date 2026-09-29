@@ -41,9 +41,15 @@ interface EnvVars {
     // CAPTCHA
     CAPTCHA_SECRET_KEY: string;
 
-    // CATALOG / PROVEEDORES EXTERNOS
-    CATALOG_CONTACT_EMAIL: string;
-    CATALOG_REQUEST_TIMEOUT_MS: number;
+    // PAYMENTS
+    PAYMENT_CLIENT_ID: string;
+    PAYMENT_CLIENT_SECRET: string;
+    PAYMENT_BASE_URL: string;
+
+    PAYMENT_PLAN_ID: string;
+
+    PAYMENT_WEBHOOK_ID: string;
+    PAYMENT_CHECKOUT_REFERENCE_SECRET: string;
 
     // THROTTLING
     THROTTLE_TTL: number;
@@ -97,10 +103,13 @@ const envsSchema = joi.object<EnvVars>({
     // CAPTCHA
     CAPTCHA_SECRET_KEY: joi.string().required(),
 
-    // CATALOG / PROVEEDORES EXTERNOS
-    // Correo con el que BiblioLink se identifica ante las APIs externas.
-    CATALOG_CONTACT_EMAIL: joi.string().email().default('soporte@bibliolink.app'),
-    CATALOG_REQUEST_TIMEOUT_MS: joi.number().integer().positive().default(10000),
+    // PAYMENTS
+    PAYMENT_CLIENT_ID: joi.string().required(),
+    PAYMENT_CLIENT_SECRET: joi.string().required(),
+    PAYMENT_BASE_URL: joi.string().uri().required(),
+    PAYMENT_PLAN_ID: joi.string().required(),
+    PAYMENT_WEBHOOK_ID: joi.string().allow('').default(''),
+    PAYMENT_CHECKOUT_REFERENCE_SECRET: joi.string().pattern(/^[A-Za-z0-9_-]{43}$/).required(),
 
     // THROTTLING (TTL en milisegundos)
     THROTTLE_TTL: joi.number().integer().positive().required(),
@@ -189,10 +198,14 @@ export const envs = {
         secretKey: envVars.CAPTCHA_SECRET_KEY,
     },
 
-    // CATALOG
-    catalog: {
-        contactEmail: envVars.CATALOG_CONTACT_EMAIL,
-        requestTimeoutMs: envVars.CATALOG_REQUEST_TIMEOUT_MS,
+    // PAYMENTS
+    payments: {
+        clientId: envVars.PAYMENT_CLIENT_ID,
+        clientSecret: envVars.PAYMENT_CLIENT_SECRET,
+        baseUrl: envVars.PAYMENT_BASE_URL,
+        planId: envVars.PAYMENT_PLAN_ID,
+        webhookId: envVars.PAYMENT_WEBHOOK_ID,
+        checkoutReferenceSecret: envVars.PAYMENT_CHECKOUT_REFERENCE_SECRET,
     },
 
     // THROTTLING

@@ -17,6 +17,7 @@ import { PaymentTransactionsModule } from './payment_transactions/payment_transa
 import { AdsModule } from './ads/ads.module';
 import { ReadingModule } from './reading/reading.module';
 import { SeedModule } from './seed/seed.module';
+import { AnalyticsModule } from './analytics/analytics.module';
 
 @Module({
     imports: [
@@ -36,24 +37,16 @@ import { SeedModule } from './seed/seed.module';
 
         ThrottlerModule.forRoot(throttlingConfig),
         AuthModule,
-
         EmailModule,
-
         CatalogsModule,
-
         BooksModule,
-
         FavoritesModule,
-
         SubscriptionsModule,
-
         PaymentTransactionsModule,
-
         SeedModule,
-
         AdsModule,
-
         ReadingModule,
+        AnalyticsModule,
     ],
 
     providers: [

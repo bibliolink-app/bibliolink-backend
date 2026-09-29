@@ -1,26 +1,71 @@
+import { createHash, randomBytes } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
-import { CreateAdDto } from './dto/create-ad.dto';
-import { UpdateAdDto } from './dto/update-ad.dto';
+import { InjectRepository } from '@nestjs/typeorm';
+import { EntityManager, IsNull, MoreThan, Repository, } from 'typeorm';
+
+import { AdRewardChallenge } from './entities/ad-reward-challenge.entity';
+import { IssuedRewardChallenge } from './interfaces/issued-reward-challenge.interface';
 
 @Injectable()
 export class AdsService {
-  create(createAdDto: CreateAdDto) {
-    return 'This action adds a new ad';
+  private static readonly REWARD_CHALLENGE_TTL_MS = 5 * 60_000;
+
+  constructor(
+    @InjectRepository(AdRewardChallenge)
+    private readonly rewardChallengeRepository: Repository<AdRewardChallenge>,
+  ) { }
+
+  async issueRewardChallenge(userId: number,): Promise<IssuedRewardChallenge> {
+    const token = randomBytes(32).toString('base64url');
+    const expiresAt = new Date(
+      Date.now() + AdsService.REWARD_CHALLENGE_TTL_MS,
+    );
+
+    const tokenHash = this.hashToken(token);
+
+    await this.rewardChallengeRepository.upsert(
+      {
+        userId,
+        tokenHash,
+        expiresAt,
+        consumedAt: null,
+      },
+      {
+        conflictPaths: ['userId'],
+      },
+    );
+
+    return {
+      token,
+      expiresAt,
+    };
   }
 
-  findAll() {
-    return `This action returns all ads`;
+  async consumeRewardChallenge(userId: number, token: string, manager?: EntityManager,): Promise<boolean> {
+    const repository = manager
+      ? manager.getRepository(AdRewardChallenge)
+      : this.rewardChallengeRepository;
+
+    const now = new Date();
+
+    const result = await repository.update(
+      {
+        userId,
+        tokenHash: this.hashToken(token),
+        consumedAt: IsNull(),
+        expiresAt: MoreThan(now),
+      },
+      {
+        consumedAt: now,
+      },
+    );
+
+    return result.affected === 1;
   }
 
-  findOne(id: number) {
-    return `This action returns a #${id} ad`;
-  }
-
-  update(id: number, updateAdDto: UpdateAdDto) {
-    return `This action updates a #${id} ad`;
-  }
-
-  remove(id: number) {
-    return `This action removes a #${id} ad`;
+  private hashToken(token: string): string {
+    return createHash('sha256')
+      .update(token)
+      .digest('hex');
   }
 }

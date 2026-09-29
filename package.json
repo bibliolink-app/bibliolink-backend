@@ -38,6 +38,7 @@
     "class-validator": "^0.15.1",
     "cookie-parser": "^1.4.7",
     "dotenv": "^17.4.2",
+    "fast-xml-parser": "^5.11.1",
     "joi": "^18.2.9",
     "mysql2": "^3.24.3",
     "nestjs-pino": "^5.2.0",

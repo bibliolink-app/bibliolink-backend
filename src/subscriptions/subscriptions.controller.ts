@@ -1,20 +1,9 @@
-import {
-    BadRequestException,
-    Body,
-    Controller,
-    HttpCode,
-    HttpStatus,
-    Post,
-    Req,
-    UseGuards,
-} from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, HttpCode, HttpStatus, Post, Req, UseGuards, } from '@nestjs/common';
 
 import type { RawBodyRequest } from '@nestjs/common';
 import type { Request } from 'express';
 
-import type {
-    AuthenticatedUser,
-} from '../auth/interfaces/authenticated-user.interface';
+import type { AuthenticatedUser, } from '../auth/interfaces/authenticated-user.interface';
 
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
@@ -22,6 +11,10 @@ import { ConfirmSubscriptionDto } from './dto/confirm-subscription.dto';
 
 import { SubscriptionsService } from './subscriptions.service';
 import {  SkipThrottle, } from '@nestjs/throttler';
+import { Roles } from '../auth/decorators/roles.decorator';
+import { UserRole } from '../users/enums/user-role.enum';
+import { MembershipResponseDto } from './dto/membership-response.dto';
+import { RolesGuard } from '../auth/guards/roles.guard';
 
 type AuthenticatedRequest = Request & {
     user: AuthenticatedUser;
@@ -32,6 +25,20 @@ export class SubscriptionsController {
     constructor(
         private readonly subscriptionsService: SubscriptionsService,
     ) { }
+
+@Get('membership')
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles(UserRole.USER)
+async getMembership( @Req() request: AuthenticatedRequest, ): Promise<MembershipResponseDto> {
+    const membership =
+        await this.subscriptionsService.getMembership(
+            request.user.userId,
+        );
+
+    return {
+        membership,
+    };
+}
 
     // 1. Crear la reserva interna de suscripción.
     @Post()

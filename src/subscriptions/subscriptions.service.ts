@@ -21,6 +21,7 @@ import { envs } from '../config/envs';
 import { createSubscriptionCheckoutReference, getSubscriptionIdFromCheckoutReference, verifySubscriptionCheckoutReference, } from './utils/subscription-checkout-reference.util';
 import { SubscriptionEventStream } from './events/subscription-event-stream.service';
 import { SubscriptionActivatedEvent, SubscriptionCanceledEvent } from './events/subscription-activated.event';
+import { Membership } from './enums/membership.enum';
 
 const PAYMENT_TIME_TOLERANCE_MS = 5 * 60 * 1000;
 const PRO_MONTHLY_AMOUNT_CENTS = 500;
@@ -42,6 +43,15 @@ export class SubscriptionsService {
     @InjectPinoLogger(SubscriptionsService.name)
     private readonly logger: PinoLogger,
   ) { }
+
+  async getMembership( userId: number, ): Promise<Membership> {
+  const hasPremiumAccess =
+    await this.hasPremiumAccess(userId);
+
+  return hasPremiumAccess
+    ? Membership.PREMIUM
+    : Membership.FREE;
+}
 
   async countActiveSubscribers(manager?: EntityManager): Promise<number> {
     const repository = manager ? manager.getRepository(Subscription) : this.subscriptionRepository;

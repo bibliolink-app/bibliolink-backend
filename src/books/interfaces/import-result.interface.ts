@@ -43,3 +43,28 @@ export interface ImportSearchResult {
     // por lo tanto, no aportaron obras a importar.
     unavailableProviders: string[];
 }
+
+// Resultado de una carga masiva: recorre varias páginas (de uno o de todos
+// los proveedores) hasta agotarlas o hasta llegar a `maxPages`.
+export interface BulkImportResult {
+    query: string;
+
+    pageSize: number;
+
+    maxPages: number;
+
+    // Páginas efectivamente consultadas antes de detenerse.
+    pagesFetched: number;
+
+    imported: ImportedBookSummary[];
+
+    failed: FailedImportSummary[];
+
+    // Proveedores que dejaron de responder durante la carga. Se detiene ahí
+    // mismo en vez de seguir pidiendo páginas a una API que ya mostró estar caída.
+    unavailableProviders: string[];
+
+    // `true` cuando se llegó a `maxPages` sin que el proveedor se quedara sin
+    // resultados: hay más obras disponibles que no se llegaron a importar.
+    truncated: boolean;
+}

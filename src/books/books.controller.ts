@@ -1,12 +1,14 @@
-import { Body, Controller, Delete, Get, Param, ParseIntPipe, Patch, Post, } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, ParseEnumPipe, ParseIntPipe, Patch, Post, } from '@nestjs/common';
 
+import { BookProviderCode } from '../catalogs/enums/book-provider-code.enum';
 import { SearchCatalogDto } from '../catalogs/dto/search-catalog.dto';
 import { BooksService } from './books.service';
 import { BookDetailResponseDto } from './dto/book-detail-response.dto';
+import { BulkImportBooksDto } from './dto/bulk-import-books.dto';
 import { CreateBookDto } from './dto/create-book.dto';
 import { ImportBookDto } from './dto/import-book.dto';
 import { UpdateBookDto } from './dto/update-book.dto';
-import type { ImportSearchResult } from './interfaces/import-result.interface';
+import type { BulkImportResult, ImportSearchResult } from './interfaces/import-result.interface';
 
 @Controller('books')
 export class BooksController {
@@ -32,6 +34,28 @@ export class BooksController {
         @Body() searchCatalogDto: SearchCatalogDto,
     ): Promise<ImportSearchResult> {
         return this.booksService.importFromSearch(searchCatalogDto);
+    }
+
+    // Guarda todas las obras de un único proveedor (carga masiva), avanzando
+    // página a página hasta agotarlas o hasta el límite indicado en `maxPages`.
+    @Post('import/providers/:providerCode')
+    importAllFromProvider(
+        @Param('providerCode', new ParseEnumPipe(BookProviderCode))
+        providerCode: BookProviderCode,
+        @Body() bulkImportBooksDto: BulkImportBooksDto,
+    ): Promise<BulkImportResult> {
+        return this.booksService.importAllFromProvider(
+            providerCode,
+            bulkImportBooksDto,
+        );
+    }
+
+    // Guarda todas las obras de todos los proveedores activos.
+    @Post('import/all')
+    importAllFromAllProviders(
+        @Body() bulkImportBooksDto: BulkImportBooksDto,
+    ): Promise<BulkImportResult> {
+        return this.booksService.importAllFromAllProviders(bulkImportBooksDto);
     }
 
     @Get()

@@ -326,6 +326,11 @@ resto del proyecto (`isMySqlUniqueViolation`).
   `pageSize`) y guarda cada obra que devuelva. Así se puebla `books` con lo
   que ofrecen los proveedores sin depender de que un usuario favorite algo
   primero.
+- `POST /books/import/providers/:providerCode` — carga masiva: guarda **todas**
+  las obras de un único proveedor, avanzando página a página hasta agotarlas
+  o hasta `maxPages`. Body opcional: `{ query?, language?, pageSize?, maxPages? }`.
+- `POST /books/import/all` — carga masiva: igual que la anterior, pero para
+  **todos los proveedores activos**. Los desactivados se omiten en silencio.
 - `GET /books` — lista lo que ya está guardado localmente.
 - `GET /books/:id` — detalle de una obra guardada, por su `book_id` interno.
 
@@ -388,6 +393,79 @@ Un proveedor caído no interrumpe a los demás: aparece en
 falle al guardarse (por ejemplo, un dato que viole una restricción) tampoco
 frena a las otras: aparece en `failed` con el motivo.
 
+**Carga masiva: todas las obras de un proveedor**
+
+Sin `query`, cada proveedor que admite listar su catálogo completo
+(Gutendex, Standard Ebooks, OpenAlex) lo recorre desde el principio; **arXiv
+no admite listar sin filtro** y con `query` vacío no devuelve nada, porque su
+API no ofrece un endpoint de listado completo (solo búsqueda).
+
+```bash
+curl -X POST http://localhost:3000/books/import/providers/standard-ebooks \
+  -H "Content-Type: application/json" \
+  -d '{"query":"shelley","pageSize":3,"maxPages":4}'
+```
+
+```json
+{
+  "query": "shelley",
+  "pageSize": 3,
+  "maxPages": 4,
+  "pagesFetched": 4,
+  "imported": [
+    { "providerCode": "standard-ebooks", "externalReference": "mary-shelley/the-last-man", "title": "The Last Man", "bookId": 12, "status": "created" },
+    { "providerCode": "standard-ebooks", "externalReference": "mary-shelley/frankenstein", "title": "Frankenstein", "bookId": 13, "status": "created" }
+  ],
+  "failed": [],
+  "unavailableProviders": [],
+  "truncated": true
+}
+```
+
+`truncated: true` significa que el proveedor todavía tenía más resultados
+cuando se llegó a `maxPages`; subir ese valor trae más. `maxPages` tiene un
+tope duro de 500 páginas para que nadie dispare sin querer una corrida de
+horas — Gutendex ronda las 75 000 obras y OpenAlex indexa cientos de millones,
+así que "traer todo, todo" de esos dos requiere subir el límite a propósito y
+con paciencia, no es el valor por omisión (20 páginas).
+
+Contra un proveedor desactivado en `book_providers`, este endpoint falla de
+inmediato con `404`, igual que `POST /books/import`: una carga masiva pedida
+explícitamente para un proveedor concreto no lo recorre igual si un
+administrador lo apagó.
+
+**Carga masiva: todos los proveedores activos**
+
+```bash
+curl -X POST http://localhost:3000/books/import/all \
+  -H "Content-Type: application/json" \
+  -d '{"query":"poe","pageSize":3,"maxPages":2}'
+```
+
+```json
+{
+  "query": "poe",
+  "pageSize": 3,
+  "maxPages": 2,
+  "pagesFetched": 4,
+  "imported": [
+    { "providerCode": "openalex", "externalReference": "W2143932682", "title": "Poe, Poe, Poe, Poe, Poe, Poe, Poe.", "bookId": 46, "status": "created" },
+    { "providerCode": "standard-ebooks", "externalReference": "edgar-allan-poe/short-fiction", "title": "Short Fiction", "bookId": 11, "status": "created" }
+  ],
+  "failed": [],
+  "unavailableProviders": ["gutendex"],
+  "truncated": true
+}
+```
+
+A diferencia de `POST /books/import/search`, aquí los proveedores
+desactivados **no** producen error: se omiten en silencio, porque es una
+carga masiva sobre "todo lo disponible", no un pedido a un proveedor puntual.
+Uno que sí está activo pero no responde (como `gutendex` en el ejemplo, que
+se suspende por inactividad) sigue apareciendo en `unavailableProviders` sin
+frenar a los demás. Los proveedores se recorren de a uno, nunca en paralelo,
+para no golpear las cuatro APIs externas a la vez.
+
 **Ver lo que ya está guardado**
 
 ```bash
@@ -399,12 +477,127 @@ curl http://localhost:3000/books/1
 
 | Código | Cuándo ocurre |
 | --- | --- |
-| `400` | Body inválido: `providerCode` desconocido, referencia vacía, o parámetros de búsqueda fuera de rango. |
-| `404` | `GET /books/:id` con un id que no existe, o `POST /books/import` contra una referencia que el proveedor no tiene. |
-| `503` | El proveedor externo no respondió a tiempo durante la importación. |
+| `400` | Body inválido: `providerCode` desconocido, referencia vacía, `maxPages`/`pageSize` fuera de rango, u otro parámetro fuera de rango. |
+| `404` | `GET /books/:id` con un id que no existe, o una importación (puntual o masiva de un proveedor) contra un proveedor desactivado o una referencia que no existe. |
+| `503` | El proveedor externo no respondió a tiempo durante una importación puntual. |
 
 Nota: por ahora estos endpoints no tienen guardias de autenticación, igual
 que el resto de `catalogs` y `books`. Antes de exponerlos en producción,
 `POST /books/import/search` en particular conviene restringirlo a un rol
 administrativo, ya que puede disparar varias llamadas a APIs externas por
 cada ejecución.
+
+## Favoritos (módulo `favorites`)
+
+Cada usuario guarda obras de `books` en sus favoritos, con un límite que
+depende de su plan:
+
+| Plan | Límite | Cuándo aplica |
+| --- | --- | --- |
+| `FREE` | 3 | Sin suscripción vigente. |
+| `PREMIUM` | 50 | `SubscriptionsService.hasPremiumAccess()` es verdadero: una suscripción `ACTIVE`, o `CANCELED` cuyo período pagado todavía no venció. |
+
+El plan **no se guarda en ninguna tabla**: se calcula en cada operación a
+partir de la suscripción. Así, una suscripción que se activa, vence o se
+cancela se refleja de inmediato, sin sincronizar nada. Los límites están en
+[favorites.constants.ts](src/favorites/constants/favorites.constants.ts).
+
+Reglas:
+
+- **Bajar de plan no borra favoritos.** Un usuario Premium con 40 favoritos
+  cuya suscripción vence los conserva todos, pero no puede agregar más hasta
+  quitar los suficientes para quedar por debajo de 3.
+- **Sin duplicados.** La restricción `UQ_favorites_user_book` impide guardar
+  la misma obra dos veces; el servicio responde `409`.
+- **Sin carreras.** El alta bloquea la fila del usuario (`pessimistic_write`,
+  el mismo patrón que `reservePendingSubscription`), así que dos solicitudes
+  simultáneas no pueden pasar ambas el control del límite.
+- **Siempre del usuario autenticado.** Todas las rutas usan `JwtAuthGuard` y
+  toman el `userId` del token, nunca del cuerpo ni de la URL.
+
+### Endpoints
+
+Todos requieren sesión iniciada (cookie `access_token`).
+
+- `GET /favorites` — favoritos del usuario, del más reciente al más antiguo,
+  con el plan y los espacios que le quedan.
+- `POST /favorites` — agrega una obra que ya está en `books`. Body: `{ bookId }`.
+- `POST /favorites/external` — agrega una obra tal como viene de
+  `GET /catalogs/search`. Body: `{ providerCode, externalReference }`. Si la
+  obra ya está en `books` usa esa copia, sin consultar al proveedor; si no,
+  la importa primero.
+- `DELETE /favorites/books/:bookId` — quita una obra de favoritos. Responde `204`.
+
+#### Ejemplos de uso
+
+**Agregar desde un resultado del catálogo**
+
+```bash
+curl -X POST http://localhost:3000/favorites/external \
+  -b "access_token=<token>" \
+  -H "Content-Type: application/json" \
+  -d '{"providerCode":"gutendex","externalReference":"1342"}'
+```
+
+```json
+{
+  "favoriteId": 5,
+  "bookId": 63,
+  "progressPercent": 0,
+  "readingLocation": null,
+  "addedAt": "2026-10-01T15:17:42.118Z",
+  "lastReadAt": null,
+  "book": {
+    "bookId": 63,
+    "providerId": 1,
+    "providerCode": "gutendex",
+    "externalReference": "1342",
+    "title": "Pride and Prejudice",
+    "description": "...",
+    "coverUrl": "https://www.gutenberg.org/cache/epub/1342/pg1342.cover.medium.jpg",
+    "contentReference": "https://www.gutenberg.org/ebooks/1342.html.images",
+    "authors": ["Jane Austen"],
+    "languages": [{ "languageCode": "en", "name": "English" }],
+    "createdAt": "2026-10-01T15:17:41.902Z",
+    "updatedAt": "2026-10-01T15:17:41.902Z"
+  }
+}
+```
+
+**Ver los favoritos y el límite**
+
+```bash
+curl http://localhost:3000/favorites -b "access_token=<token>"
+```
+
+```json
+{
+  "plan": "FREE",
+  "limit": 3,
+  "count": 3,
+  "remaining": 0,
+  "items": [
+    { "favoriteId": 5, "bookId": 63, "progressPercent": 0, "readingLocation": null, "addedAt": "2026-10-01T15:17:42.118Z", "lastReadAt": null, "book": { "title": "Pride and Prejudice" } }
+  ]
+}
+```
+
+En los ejemplos, `description` y `book` van recortados; la respuesta real trae la obra completa,
+igual que en `POST`.
+
+**Quitar un favorito**
+
+```bash
+curl -X DELETE http://localhost:3000/favorites/books/63 -b "access_token=<token>"
+```
+
+#### Errores
+
+| Código | Cuándo ocurre |
+| --- | --- |
+| `400` | `bookId` no es un entero positivo, o `providerCode`/`externalReference` inválidos. |
+| `401` | Sin sesión, token vencido o cuenta inactiva. |
+| `403` | Se alcanzó el límite del plan. El mensaje indica el límite y, si es `FREE`, que Premium permite 50. |
+| `404` | El libro no existe, la referencia no existe en el proveedor, o se intenta quitar un libro que no está en favoritos. |
+| `409` | El libro ya está en favoritos. |
+| `503` | `POST /favorites/external` tuvo que importar la obra y el proveedor no respondió. |

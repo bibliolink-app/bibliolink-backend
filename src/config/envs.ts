@@ -41,6 +41,10 @@ interface EnvVars {
     // CAPTCHA
     CAPTCHA_SECRET_KEY: string;
 
+    // CATALOG / PROVEEDORES EXTERNOS
+    CATALOG_CONTACT_EMAIL: string;
+    CATALOG_REQUEST_TIMEOUT_MS: number;
+
     // PAYMENTS
     PAYMENT_CLIENT_ID: string;
     PAYMENT_CLIENT_SECRET: string;
@@ -102,6 +106,11 @@ const envsSchema = joi.object<EnvVars>({
 
     // CAPTCHA
     CAPTCHA_SECRET_KEY: joi.string().required(),
+
+    // CATALOG / PROVEEDORES EXTERNOS
+    // Correo con el que BiblioLink se identifica ante las APIs externas.
+    CATALOG_CONTACT_EMAIL: joi.string().email().default('soporte@bibliolink.app'),
+    CATALOG_REQUEST_TIMEOUT_MS: joi.number().integer().positive().default(10000),
 
     // PAYMENTS
     PAYMENT_CLIENT_ID: joi.string().required(),
@@ -196,6 +205,12 @@ export const envs = {
     // CAPTCHA
     captcha: {
         secretKey: envVars.CAPTCHA_SECRET_KEY,
+    },
+
+    // CATALOG
+    catalog: {
+        contactEmail: envVars.CATALOG_CONTACT_EMAIL,
+        requestTimeoutMs: envVars.CATALOG_REQUEST_TIMEOUT_MS,
     },
 
     // PAYMENTS

@@ -3,14 +3,17 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { In, Repository } from 'typeorm';
 
+import { CATALOG_DEFAULT_PAGE_SIZE } from '../catalogs/constants/catalogs.constants';
 import { CatalogsService } from '../catalogs/catalogs.service';
 import { SearchCatalogDto } from '../catalogs/dto/search-catalog.dto';
 import { BookProviderCode } from '../catalogs/enums/book-provider-code.enum';
 import type { ExternalBook } from '../catalogs/interfaces/external-book.interface';
 import { isMySqlUniqueViolation } from '../common/databases/is-mysql-unique-violation';
+import { BOOKS_BULK_IMPORT_DEFAULT_MAX_PAGES } from './constants/books.constants';
 import { resolveLanguageName } from './data/language-names';
 import { BookDetailResponseDto } from './dto/book-detail-response.dto';
 import { BookLanguageResponseDto } from './dto/book-language-response.dto';
+import { BulkImportBooksDto } from './dto/bulk-import-books.dto';
 import { CreateBookDto } from './dto/create-book.dto';
 import { ImportBookDto } from './dto/import-book.dto';
 import { UpdateBookDto } from './dto/update-book.dto';
@@ -18,7 +21,7 @@ import { BookAuthor } from './entities/book-author.entity';
 import { BookLanguage } from './entities/book-language.entity';
 import { Book } from './entities/book.entity';
 import { Language } from './entities/language.entity';
-import type { FailedImportSummary, ImportedBookSummary, ImportSearchResult, } from './interfaces/import-result.interface';
+import type { BulkImportResult, FailedImportSummary, ImportedBookSummary, ImportSearchResult, } from './interfaces/import-result.interface';
 
 // Resultado interno de guardar una obra externa en `books`.
 interface UpsertResult {
@@ -71,26 +74,49 @@ export class BooksService {
             .orderBy('book.title', 'ASC')
             .getMany();
 
-        if (books.length === 0) {
+        return this.toDetailDtos(books);
+    }
+
+    // Recupera varias obras guardadas a la vez, por su identificador interno.
+    // Las que no existan simplemente no aparecen en el resultado.
+    async findByIds(bookIds: number[]): Promise<BookDetailResponseDto[]> {
+        if (bookIds.length === 0) {
             return [];
         }
 
-        const bookIds = books.map((book) => book.bookId);
+        const books = await this.booksRepository
+            .createQueryBuilder('book')
+            .leftJoinAndSelect('book.provider', 'provider')
+            .where('book.bookId IN (:...bookIds)', { bookIds })
+            .getMany();
 
-        // Se cargan autores e idiomas en dos consultas por lote en vez de
-        // una por obra, para no repetir el patrón N+1 al listar todo el catálogo.
-        const [authorsByBook, languagesByBook] = await Promise.all([
-            this.loadAuthorsByBookIds(bookIds),
-            this.loadLanguagesByBookIds(bookIds),
-        ]);
+        return this.toDetailDtos(books);
+    }
 
-        return books.map((book) =>
-            this.toDetailDto(
-                book,
-                authorsByBook.get(book.bookId) ?? [],
-                languagesByBook.get(book.bookId) ?? [],
-            ),
-        );
+    // Devuelve la copia local de una obra externa y solo la importa si
+    // todavía no está en `books`. A diferencia de `importByReference`, no
+    // consulta al proveedor cuando la obra ya existe, así que sigue
+    // funcionando aunque la API externa esté caída.
+    async findOrImportByReference(
+        importBookDto: ImportBookDto,
+    ): Promise<BookDetailResponseDto> {
+        const existingBook = await this.booksRepository
+            .createQueryBuilder('book')
+            .innerJoin('book.provider', 'provider')
+            .select(['book.bookId'])
+            .where('provider.code = :providerCode', {
+                providerCode: importBookDto.providerCode,
+            })
+            .andWhere('book.externalReference = :externalReference', {
+                externalReference: importBookDto.externalReference,
+            })
+            .getOne();
+
+        if (existingBook) {
+            return this.findOne(existingBook.bookId);
+        }
+
+        return this.importByReference(importBookDto);
     }
 
     // Recupera una obra guardada localmente por su identificador interno.
@@ -211,6 +237,211 @@ export class BooksService {
             failed,
             unavailableProviders: searchResult.unavailableProviders,
         };
+    }
+
+    // Guarda todas las obras de un único proveedor, avanzando página a
+    // página hasta que se agoten o hasta llegar a `maxPages`. El proveedor
+    // debe estar activo: si está desactivado, falla de inmediato con el
+    // mismo error que usa una importación puntual, en vez de recorrerlo igual.
+    async importAllFromProvider(
+        providerCode: BookProviderCode,
+        options: BulkImportBooksDto = {},
+    ): Promise<BulkImportResult> {
+        const pageSize = options.pageSize ?? CATALOG_DEFAULT_PAGE_SIZE;
+        const maxPages = options.maxPages ?? BOOKS_BULK_IMPORT_DEFAULT_MAX_PAGES;
+
+        this.logger.info(
+            { providerCode, pageSize, maxPages, operation: 'importAllFromProvider' },
+            'Starting bulk import for a single provider',
+        );
+
+        const { pagesFetched, imported, failed, truncated, unavailable } =
+            await this.importAllPagesForProvider(providerCode, options, pageSize, maxPages);
+
+        this.logger.info(
+            {
+                providerCode,
+                pagesFetched,
+                imported: imported.length,
+                failed: failed.length,
+                truncated,
+                unavailable,
+            },
+            'Bulk import for a single provider completed',
+        );
+
+        return {
+            query: options.query ?? '',
+            pageSize,
+            maxPages,
+            pagesFetched,
+            imported,
+            failed,
+            unavailableProviders: unavailable ? [providerCode] : [],
+            truncated,
+        };
+    }
+
+    // Guarda todas las obras de todos los proveedores activos. Los
+    // desactivados se omiten en silencio: es una carga masiva, no un pedido
+    // puntual a un proveedor concreto que el administrador eligió apagar.
+    // Los proveedores se recorren de a uno, no en paralelo, para no
+    // multiplicar la carga sobre las cuatro APIs externas a la vez.
+    async importAllFromAllProviders(
+        options: BulkImportBooksDto = {},
+    ): Promise<BulkImportResult> {
+        const pageSize = options.pageSize ?? CATALOG_DEFAULT_PAGE_SIZE;
+        const maxPages = options.maxPages ?? BOOKS_BULK_IMPORT_DEFAULT_MAX_PAGES;
+
+        this.logger.info(
+            { pageSize, maxPages, operation: 'importAllFromAllProviders' },
+            'Starting bulk import for all active providers',
+        );
+
+        const providers = await this.catalogsService.findAllProviders();
+        const activeProviders = providers.filter((provider) => provider.active);
+
+        const imported: ImportedBookSummary[] = [];
+        const failed: FailedImportSummary[] = [];
+        const unavailableProviders: string[] = [];
+        let pagesFetched = 0;
+        let truncated = false;
+
+        for (const provider of activeProviders) {
+            const providerCode = provider.code as BookProviderCode;
+
+            const result = await this.importAllPagesForProvider(
+                providerCode,
+                options,
+                pageSize,
+                maxPages,
+            );
+
+            imported.push(...result.imported);
+            failed.push(...result.failed);
+            pagesFetched += result.pagesFetched;
+            truncated = truncated || result.truncated;
+
+            if (result.unavailable) {
+                unavailableProviders.push(providerCode);
+            }
+        }
+
+        this.logger.info(
+            {
+                providerCount: activeProviders.length,
+                pagesFetched,
+                imported: imported.length,
+                failed: failed.length,
+                unavailableProviders,
+                truncated,
+            },
+            'Bulk import for all providers completed',
+        );
+
+        return {
+            query: options.query ?? '',
+            pageSize,
+            maxPages,
+            pagesFetched,
+            imported,
+            failed,
+            unavailableProviders,
+            truncated,
+        };
+    }
+
+    // Recorre las páginas de un único proveedor hasta agotarlas o hasta
+    // `maxPages`, guardando cada obra que aparezca. Es el motor común de
+    // `importAllFromProvider` e `importAllFromAllProviders`.
+    private async importAllPagesForProvider(
+        providerCode: BookProviderCode,
+        options: BulkImportBooksDto,
+        pageSize: number,
+        maxPages: number,
+    ): Promise<{
+        pagesFetched: number;
+        imported: ImportedBookSummary[];
+        failed: FailedImportSummary[];
+        truncated: boolean;
+        unavailable: boolean;
+    }> {
+        const query = options.query ?? '';
+
+        const imported: ImportedBookSummary[] = [];
+        const failed: FailedImportSummary[] = [];
+        let pagesFetched = 0;
+        let truncated = false;
+        let unavailable = false;
+
+        for (let page = 1; page <= maxPages; page += 1) {
+            const searchResult = await this.catalogsService.search({
+                provider: providerCode,
+                query,
+                language: options.language,
+                page,
+                pageSize,
+            });
+
+            // El proveedor no respondió esta página: se detiene aquí en vez
+            // de seguir pidiéndole páginas a una API que ya mostró estar caída.
+            if (searchResult.unavailableProviders.includes(providerCode)) {
+                unavailable = true;
+                break;
+            }
+
+            const providerPage = searchResult.results[0];
+
+            if (!providerPage) {
+                break;
+            }
+
+            pagesFetched += 1;
+
+            for (const externalBook of providerPage.items) {
+                try {
+                    const { bookId, status } =
+                        await this.upsertFromExternalBook(externalBook);
+
+                    imported.push({
+                        providerCode: externalBook.providerCode,
+                        externalReference: externalBook.externalReference,
+                        title: externalBook.title,
+                        bookId,
+                        status,
+                    });
+                } catch (error: unknown) {
+                    // Una obra que falle no debe descartar a las demás de la carga.
+                    this.logger.error(
+                        {
+                            err: error,
+                            providerCode: externalBook.providerCode,
+                            externalReference: externalBook.externalReference,
+                        },
+                        'Failed to import a book during a bulk load',
+                    );
+
+                    failed.push({
+                        providerCode: externalBook.providerCode,
+                        externalReference: externalBook.externalReference,
+                        title: externalBook.title,
+                        reason: 'No se pudo guardar la obra. Revise los registros del servidor.',
+                    });
+                }
+            }
+
+            if (!providerPage.hasNextPage) {
+                // Se agotaron los resultados de verdad: no hace falta seguir.
+                break;
+            }
+
+            if (page === maxPages) {
+                // Había más resultados, pero se llegó al límite de páginas.
+                truncated = true;
+            }
+        }
+
+        return { pagesFetched, imported, failed, truncated, unavailable };
     }
 
     // Inserta o actualiza una obra externa en `books`, `book_authors` y
@@ -417,6 +648,29 @@ export class BooksService {
         }
 
         return languagesByBook;
+    }
+
+    // Arma la respuesta de varias obras cargando autores e idiomas en dos
+    // consultas por lote, en vez de una por obra (evita el patrón N+1).
+    private async toDetailDtos(books: Book[]): Promise<BookDetailResponseDto[]> {
+        if (books.length === 0) {
+            return [];
+        }
+
+        const bookIds = books.map((book) => book.bookId);
+
+        const [authorsByBook, languagesByBook] = await Promise.all([
+            this.loadAuthorsByBookIds(bookIds),
+            this.loadLanguagesByBookIds(bookIds),
+        ]);
+
+        return books.map((book) =>
+            this.toDetailDto(
+                book,
+                authorsByBook.get(book.bookId) ?? [],
+                languagesByBook.get(book.bookId) ?? [],
+            ),
+        );
     }
 
     // Traduce una fila de `books` (más sus autores e idiomas ya resueltos)

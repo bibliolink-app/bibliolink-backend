@@ -1,4 +1,4 @@
-import { ConflictException, ForbiddenException, Injectable, NotFoundException, } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException, } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { Repository } from 'typeorm';
@@ -10,9 +10,10 @@ import { Book } from '../books/entities/book.entity';
 import { isMySqlUniqueViolation } from '../common/databases/is-mysql-unique-violation';
 import { SubscriptionsService } from '../subscriptions/subscriptions.service';
 import { User } from '../users/entities/user.entity';
-import { FREE_FAVORITES_LIMIT, PREMIUM_FAVORITES_LIMIT, } from './constants/favorites.constants';
+import { FREE_FAVORITES_LIMIT, MAX_PROGRESS_PERCENT, MIN_PROGRESS_PERCENT, PREMIUM_FAVORITES_LIMIT, READING_LOCATION_MAX_LENGTH, } from './constants/favorites.constants';
 import { FavoriteResponseDto } from './dto/favorite-response.dto';
 import { FavoritesListResponseDto } from './dto/favorites-list-response.dto';
+import { ReadingStateResponseDto } from './dto/reading-state-response.dto';
 import { Favorite } from './entities/favorite.entity';
 import { UserPlan } from './enums/user-plan.enum';
 
@@ -197,6 +198,99 @@ export class FavoritesService {
         }
 
         this.logger.info({ userId, bookId }, 'Favorite removed successfully');
+    }
+
+    // Devuelve el progreso de lectura del usuario sobre una obra favorita, o
+    // `null` si no la tiene en favoritos. Se busca por `userId` + `bookId`
+    // porque la misma obra puede ser favorita de muchos usuarios y cada uno
+    // tiene su propio progreso.
+    async findReadingState(
+        userId: number,
+        bookId: number,
+    ): Promise<ReadingStateResponseDto | null> {
+        this.logger.debug({ userId, bookId, operation: 'findReadingState' }, 'Looking up reading state');
+
+        const favorite = await this.favoritesRepository.findOne({
+            select: {
+                progressPercent: true,
+                readingLocation: true,
+                lastReadAt: true,
+            },
+            where: { userId, bookId },
+        });
+
+        if (!favorite) {
+            return null;
+        }
+
+        return {
+            // MySQL devuelve los DECIMAL como texto para no perder precisión.
+            progressPercent: Number(favorite.progressPercent),
+            readingLocation: favorite.readingLocation,
+            lastReadAt: favorite.lastReadAt,
+        };
+    }
+
+    // Guarda el progreso de lectura de una obra que el usuario ya tiene en
+    // favoritos. `lastReadAt` siempre lo fija el backend, nunca el cliente,
+    // para que no dependa del reloj del dispositivo.
+    async updateReadingProgress(
+        userId: number,
+        bookId: number,
+        progressPercent: number,
+        readingLocation: string | null,
+    ): Promise<ReadingStateResponseDto> {
+        this.logger.debug({ userId, bookId, operation: 'updateReadingProgress' }, 'Updating reading progress');
+
+        // Se valida aquí además de en el DTO porque otros módulos pueden
+        // llamar a este método sin pasar por la capa HTTP.
+        if (
+            !Number.isFinite(progressPercent) ||
+            progressPercent < MIN_PROGRESS_PERCENT ||
+            progressPercent > MAX_PROGRESS_PERCENT
+        ) {
+            throw new BadRequestException(
+                `El progreso debe estar entre ${MIN_PROGRESS_PERCENT} y ${MAX_PROGRESS_PERCENT}.`,
+            );
+        }
+
+        if (
+            readingLocation !== null &&
+            readingLocation.length > READING_LOCATION_MAX_LENGTH
+        ) {
+            throw new BadRequestException(
+                `La posición de lectura no puede superar los ${READING_LOCATION_MAX_LENGTH} caracteres.`,
+            );
+        }
+
+        // La columna es DECIMAL(5,2): se redondea a dos decimales para que lo
+        // que se responde coincida con lo que queda guardado.
+        const roundedProgress = Math.round(progressPercent * 100) / 100;
+        const lastReadAt = new Date();
+
+        const result = await this.favoritesRepository.update(
+            { userId, bookId },
+            {
+                progressPercent: roundedProgress.toFixed(2),
+                readingLocation,
+                lastReadAt,
+            },
+        );
+
+        if (!result.affected) {
+            throw new NotFoundException('El libro no está en tus favoritos.');
+        }
+
+        this.logger.info(
+            { userId, bookId, progressPercent: roundedProgress },
+            'Reading progress updated successfully',
+        );
+
+        return {
+            progressPercent: roundedProgress,
+            readingLocation,
+            lastReadAt,
+        };
     }
 
     // El límite depende de si el usuario tiene acceso Premium vigente.

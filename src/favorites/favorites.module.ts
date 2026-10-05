@@ -23,5 +23,8 @@ import { FavoritesService } from './favorites.service';
     ],
     controllers: [FavoritesController],
     providers: [FavoritesService],
+    // Permite que otros módulos (por ejemplo, `reading`) lean y guarden el
+    // progreso de lectura sin duplicar esta lógica.
+    exports: [FavoritesService],
 })
 export class FavoritesModule { }

@@ -38,6 +38,10 @@ interface EnvVars {
     // PASSWORD RESET
     PASSWORD_RESET_TOKEN_TTL_MINUTES: number;
 
+
+    // READING
+    READING_FREE_PERIOD_MINUTES: number;
+
     // CAPTCHA
     CAPTCHA_SECRET_KEY: string;
 
@@ -103,6 +107,9 @@ const envsSchema = joi.object<EnvVars>({
 
     // PASSWORD RESET
     PASSWORD_RESET_TOKEN_TTL_MINUTES: joi.number().integer().positive().default(15),
+
+    // READING
+    READING_FREE_PERIOD_MINUTES: joi.number().integer().positive().default(10),
 
     // CAPTCHA
     CAPTCHA_SECRET_KEY: joi.string().required(),
@@ -200,6 +207,12 @@ export const envs = {
     // PASSWORD RESET
     passwordReset: {
         tokenTtlMinutes: envVars.PASSWORD_RESET_TOKEN_TTL_MINUTES,
+    },
+
+    // READING
+    reading: {
+        freePeriodMinutes: envVars.READING_FREE_PERIOD_MINUTES,
+        freePeriodMs: envVars.READING_FREE_PERIOD_MINUTES * 60_000,
     },
 
     // CAPTCHA

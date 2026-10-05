@@ -688,7 +688,6 @@ export class BooksService {
             title: book.title,
             description: book.description,
             coverUrl: book.coverUrl,
-            contentReference: book.contentReference,
             authors,
             languages,
             createdAt: book.createdAt,

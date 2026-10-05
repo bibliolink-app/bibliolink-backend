@@ -1,34 +1,44 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete } from '@nestjs/common';
+import { Body, Controller, HttpCode, HttpStatus, Param, ParseIntPipe, Post, UseGuards, } from '@nestjs/common';
+
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { Roles } from '../auth/decorators/roles.decorator';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../auth/guards/roles.guard';
+import type { AuthenticatedUser } from '../auth/interfaces/authenticated-user.interface';
+import { UserRole } from '../users/enums/user-role.enum';
+import { ReadingAccessResponseDto } from './dto/reading-access-response.dto';
 import { ReadingService } from './reading.service';
-import { CreateReadingDto } from './dto/create-reading.dto';
-import { UpdateReadingDto } from './dto/update-reading.dto';
+import { RewardChallengeResponseDto } from './dto/reward-challenge-response.dto';
+import { RedeemRewardedAdDto } from './dto/redeem-rewarded-ad.dto';
+import { ReadingRewardResponseDto } from './dto/reading-reward-response.dto';
 
 @Controller('reading')
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles(UserRole.USER)
 export class ReadingController {
-  constructor(private readonly readingService: ReadingService) {}
+  constructor(private readonly readingService: ReadingService) { }
 
-  @Post()
-  create(@Body() createReadingDto: CreateReadingDto) {
-    return this.readingService.create(createReadingDto);
+  @Post('books/:bookId/access')
+  @HttpCode(HttpStatus.OK)
+  startReading(@CurrentUser() currentUser: AuthenticatedUser, @Param('bookId', ParseIntPipe) bookId: number,): Promise<ReadingAccessResponseDto> {
+    return this.readingService.startReading(currentUser.userId, bookId);
   }
 
-  @Get()
-  findAll() {
-    return this.readingService.findAll();
+  @Post('reward-challenge')
+  @HttpCode(HttpStatus.OK)
+  issueRewardChallenge(
+    @CurrentUser() currentUser: AuthenticatedUser,
+  ): Promise<RewardChallengeResponseDto> {
+    return this.readingService.requestRewardedAd(currentUser.userId);
   }
 
-  @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.readingService.findOne(+id);
-  }
 
-  @Patch(':id')
-  update(@Param('id') id: string, @Body() updateReadingDto: UpdateReadingDto) {
-    return this.readingService.update(+id, updateReadingDto);
-  }
-
-  @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.readingService.remove(+id);
-  }
+  @Post('reward')
+@HttpCode(HttpStatus.OK)
+redeemRewardedAd( @CurrentUser() currentUser: AuthenticatedUser, @Body() redeemRewardedAdDto: RedeemRewardedAdDto, ): Promise<ReadingRewardResponseDto> {
+    return this.readingService.redeemRewardedAd(
+        currentUser.userId,
+        redeemRewardedAdDto.token,
+    );
+}
 }

@@ -18,7 +18,6 @@ export class BookDetailResponseDto {
 
     coverUrl!: string | null;
 
-    contentReference!: string | null;
 
     // Autores en el orden en que los publicó el proveedor.
     authors!: string[];

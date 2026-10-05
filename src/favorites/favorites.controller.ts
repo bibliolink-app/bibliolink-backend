@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, ParseIntPipe, Post, UseGuards, } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, HttpStatus, NotFoundException, Param, ParseIntPipe, Patch, Post, UseGuards, } from '@nestjs/common';
 
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -7,6 +7,8 @@ import { ImportBookDto } from '../books/dto/import-book.dto';
 import { CreateFavoriteDto } from './dto/create-favorite.dto';
 import { FavoriteResponseDto } from './dto/favorite-response.dto';
 import { FavoritesListResponseDto } from './dto/favorites-list-response.dto';
+import { ReadingStateResponseDto } from './dto/reading-state-response.dto';
+import { UpdateReadingProgressDto } from './dto/update-reading-progress.dto';
 import { FavoritesService } from './favorites.service';
 
 // Todas las rutas operan sobre los favoritos del usuario autenticado: el
@@ -48,6 +50,39 @@ export class FavoritesController {
         return this.favoritesService.addFavoriteByReference(
             currentUser.userId,
             importBookDto,
+        );
+    }
+
+    // Progreso de lectura del usuario sobre una obra favorita.
+    @Get('books/:bookId/progress')
+    async findReadingState(
+        @CurrentUser() currentUser: AuthenticatedUser,
+        @Param('bookId', ParseIntPipe) bookId: number,
+    ): Promise<ReadingStateResponseDto> {
+        const readingState = await this.favoritesService.findReadingState(
+            currentUser.userId,
+            bookId,
+        );
+
+        if (!readingState) {
+            throw new NotFoundException('El libro no está en tus favoritos.');
+        }
+
+        return readingState;
+    }
+
+    // Guarda el progreso de lectura de una obra favorita.
+    @Patch('books/:bookId/progress')
+    updateReadingProgress(
+        @CurrentUser() currentUser: AuthenticatedUser,
+        @Param('bookId', ParseIntPipe) bookId: number,
+        @Body() updateReadingProgressDto: UpdateReadingProgressDto,
+    ): Promise<ReadingStateResponseDto> {
+        return this.favoritesService.updateReadingProgress(
+            currentUser.userId,
+            bookId,
+            updateReadingProgressDto.progressPercent,
+            updateReadingProgressDto.readingLocation ?? null,
         );
     }
 

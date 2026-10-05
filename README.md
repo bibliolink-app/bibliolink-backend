@@ -526,6 +526,10 @@ Todos requieren sesión iniciada (cookie `access_token`).
   `GET /catalogs/search`. Body: `{ providerCode, externalReference }`. Si la
   obra ya está en `books` usa esa copia, sin consultar al proveedor; si no,
   la importa primero.
+- `GET /favorites/books/:bookId/progress` — progreso de lectura del usuario
+  sobre esa obra.
+- `PATCH /favorites/books/:bookId/progress` — guarda el progreso. Body:
+  `{ progressPercent, readingLocation? }`.
 - `DELETE /favorites/books/:bookId` — quita una obra de favoritos. Responde `204`.
 
 #### Ejemplos de uso
@@ -591,13 +595,61 @@ igual que en `POST`.
 curl -X DELETE http://localhost:3000/favorites/books/63 -b "access_token=<token>"
 ```
 
+### Progreso de lectura
+
+El progreso vive en la propia fila de `favorites` (`progress_percent`,
+`reading_location`, `last_read_at`): no hay tabla aparte. Cada fila es de un
+par usuario + obra, así que dos usuarios con el mismo libro favorito tienen
+progresos independientes. Por lo mismo, solo se puede guardar progreso de
+obras que el usuario tiene en favoritos.
+
+Reglas:
+
+- `progressPercent` va de 0 a 100. Se redondea a dos decimales, igual que la
+  columna `DECIMAL(5,2)`, y la respuesta devuelve el valor ya redondeado.
+- `readingLocation` es texto libre de hasta 1000 caracteres; su formato lo
+  decide el lector del frontend (un capítulo, un CFI de epub, una página).
+  Cada actualización la reemplaza: si se omite o llega vacía se guarda `null`.
+- `lastReadAt` lo fija siempre el backend con su hora actual; el cliente no
+  puede enviarla (el `ValidationPipe` rechaza el campo).
+- Los dos métodos de `FavoritesService` (`findReadingState` y
+  `updateReadingProgress`) están exportados para que otros módulos, como
+  `reading`, los usen sin pasar por HTTP. El servicio valida el rango por su
+  cuenta, no solo el DTO.
+
+**Guardar progreso**
+
+```bash
+curl -X PATCH http://localhost:3000/favorites/books/7/progress \
+  -b "access_token=<token>" \
+  -H "Content-Type: application/json" \
+  -d '{"progressPercent":45.678,"readingLocation":"chapter-3"}'
+```
+
+```json
+{
+  "progressPercent": 45.68,
+  "readingLocation": "chapter-3",
+  "lastReadAt": "2026-10-05T02:24:46.639Z"
+}
+```
+
+**Consultar progreso**
+
+```bash
+curl http://localhost:3000/favorites/books/7/progress -b "access_token=<token>"
+```
+
+Devuelve el mismo formato. Un favorito recién agregado responde
+`{ "progressPercent": 0, "readingLocation": null, "lastReadAt": null }`.
+
 #### Errores
 
 | Código | Cuándo ocurre |
 | --- | --- |
-| `400` | `bookId` no es un entero positivo, o `providerCode`/`externalReference` inválidos. |
+| `400` | `bookId` no es un entero positivo, `providerCode`/`externalReference` inválidos, `progressPercent` fuera de 0–100 o no numérico, `readingLocation` de más de 1000 caracteres, o un campo no permitido como `lastReadAt`. |
 | `401` | Sin sesión, token vencido o cuenta inactiva. |
 | `403` | Se alcanzó el límite del plan. El mensaje indica el límite y, si es `FREE`, que Premium permite 50. |
-| `404` | El libro no existe, la referencia no existe en el proveedor, o se intenta quitar un libro que no está en favoritos. |
+| `404` | El libro no existe, la referencia no existe en el proveedor, o se quita, consulta o actualiza el progreso de un libro que no está en favoritos. |
 | `409` | El libro ya está en favoritos. |
 | `503` | `POST /favorites/external` tuvo que importar la obra y el proveedor no respondió. |

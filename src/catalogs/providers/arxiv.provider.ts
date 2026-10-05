@@ -3,10 +3,12 @@ import { XMLParser } from 'fast-xml-parser';
 import { setTimeout as delay } from 'node:timers/promises';
 
 import { BOOK_EXTERNAL_REFERENCE_MAX_LENGTH, BOOK_TITLE_MAX_LENGTH, } from '../constants/catalogs.constants';
+import { BookContentFormat } from '../enums/book-content-format.enum';
 import { BookProviderCode } from '../enums/book-provider-code.enum';
 import { CatalogHttpService } from '../http/catalog-http.service';
 import type { BookCatalogProvider } from '../interfaces/book-catalog-provider.interface';
 import type { CatalogSearchCriteria, ExternalBook, ExternalBookPage, } from '../interfaces/external-book.interface';
+import { toBookContent, type BookContent, } from '../utils/book-content.util';
 import { normalizeAuthorNames, toArray, toNullableText, toNullableUrl, truncate, } from '../utils/catalog-text.util';
 
 // arXiv publica su API como un feed Atom, no como JSON.
@@ -187,7 +189,7 @@ export class ArxivProvider implements BookCatalogProvider {
             description: toNullableText(entry.summary),
             // arXiv no publica portadas para sus artículos.
             coverUrl: null,
-            contentReference: this.resolveContentReference(
+            ...this.resolveContent(
                 toArray(entry.link),
                 externalReference,
             ),
@@ -224,27 +226,31 @@ export class ArxivProvider implements BookCatalogProvider {
     }
 
     // Prefiere el PDF del artículo y, si no aparece, su página de resumen.
-    private resolveContentReference(
+    // El formato sale de cómo arXiv declara el enlace (`title="pdf"` o
+    // `type="application/pdf"`); la página de resumen es una ficha web, no
+    // el artículo, así que se marca como página externa.
+    private resolveContent(
         links: AtomLink[],
         externalReference: string,
-    ): string | null {
+    ): BookContent {
         const pdfLink = links.find(
             (link) =>
                 link['@_title'] === 'pdf' ||
                 link['@_type'] === 'application/pdf',
         );
 
-        const pdfHref = toNullableUrl(pdfLink?.['@_href']);
+        const pdfContent = toBookContent(pdfLink?.['@_href'], BookContentFormat.PDF);
 
-        if (pdfHref !== null) {
-            return pdfHref;
+        if (pdfContent.contentReference !== null) {
+            return pdfContent;
         }
 
         const alternate = links.find((link) => link['@_rel'] === 'alternate');
 
-        return (
+        return toBookContent(
             toNullableUrl(alternate?.['@_href']) ??
-            'https://arxiv.org' + ARXIV_ABSTRACT_PATH + externalReference
+            'https://arxiv.org' + ARXIV_ABSTRACT_PATH + externalReference,
+            BookContentFormat.EXTERNAL_PAGE,
         );
     }
 }

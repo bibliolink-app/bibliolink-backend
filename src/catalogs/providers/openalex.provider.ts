@@ -2,11 +2,13 @@ import { Injectable } from '@nestjs/common';
 
 import { envs } from '../../config/envs';
 import { BOOK_EXTERNAL_REFERENCE_MAX_LENGTH, BOOK_TITLE_MAX_LENGTH, } from '../constants/catalogs.constants';
+import { BookContentFormat } from '../enums/book-content-format.enum';
 import { BookProviderCode } from '../enums/book-provider-code.enum';
 import { CatalogHttpService } from '../http/catalog-http.service';
 import type { BookCatalogProvider } from '../interfaces/book-catalog-provider.interface';
 import type { CatalogSearchCriteria, ExternalBook, ExternalBookPage, } from '../interfaces/external-book.interface';
-import { normalizeAuthorNames, normalizeLanguageCodes, toNullableText, toNullableUrl, truncate, } from '../utils/catalog-text.util';
+import { NO_BOOK_CONTENT, toBookContent, type BookContent, } from '../utils/book-content.util';
+import { normalizeAuthorNames, normalizeLanguageCodes, toNullableText, truncate, } from '../utils/catalog-text.util';
 
 // OpenAlex indexa artículos, libros y otros trabajos académicos.
 const OPENALEX_WORKS_URL = 'https://api.openalex.org/works';
@@ -157,7 +159,7 @@ export class OpenAlexProvider implements BookCatalogProvider {
             description: this.rebuildAbstract(work.abstract_inverted_index),
             // OpenAlex es un índice de metadatos y no distribuye portadas.
             coverUrl: null,
-            contentReference: this.resolveContentReference(work),
+            ...this.resolveContent(work),
             authors: normalizeAuthorNames(
                 (work.authorships ?? []).map(
                     (authorship) => authorship.author?.display_name,
@@ -212,25 +214,29 @@ export class OpenAlexProvider implements BookCatalogProvider {
         );
     }
 
-    // Prefiere el acceso abierto y, si no existe, la página del trabajo.
-    private resolveContentReference(work: OpenAlexWork): string | null {
-        const candidates = [
-            work.best_oa_location?.pdf_url,
-            work.best_oa_location?.landing_page_url,
-            work.open_access?.oa_url,
-            work.primary_location?.pdf_url,
-            work.primary_location?.landing_page_url,
-            work.doi,
+    // Prefiere un PDF de acceso abierto y, si no hay, una página del trabajo.
+    // Solo los campos `pdf_url`, que OpenAlex declara como PDF, se marcan
+    // así. La página de aterrizaje, `oa_url` (puede ser un PDF o una página,
+    // y no se adivina por la URL) y el DOI son páginas externas: llevan a la
+    // obra, pero no son el contenido legible.
+    private resolveContent(work: OpenAlexWork): BookContent {
+        const candidates: readonly [unknown, BookContentFormat][] = [
+            [work.best_oa_location?.pdf_url, BookContentFormat.PDF],
+            [work.primary_location?.pdf_url, BookContentFormat.PDF],
+            [work.best_oa_location?.landing_page_url, BookContentFormat.EXTERNAL_PAGE],
+            [work.open_access?.oa_url, BookContentFormat.EXTERNAL_PAGE],
+            [work.primary_location?.landing_page_url, BookContentFormat.EXTERNAL_PAGE],
+            [work.doi, BookContentFormat.EXTERNAL_PAGE],
         ];
 
-        for (const candidate of candidates) {
-            const url = toNullableUrl(candidate);
+        for (const [url, format] of candidates) {
+            const content = toBookContent(url, format);
 
-            if (url !== null) {
-                return url;
+            if (content.contentReference !== null) {
+                return content;
             }
         }
 
-        return null;
+        return NO_BOOK_CONTENT;
     }
 }

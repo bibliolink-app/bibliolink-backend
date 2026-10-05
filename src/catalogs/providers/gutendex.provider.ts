@@ -1,10 +1,12 @@
 import { Injectable } from '@nestjs/common';
 
 import { BOOK_EXTERNAL_REFERENCE_MAX_LENGTH, BOOK_TITLE_MAX_LENGTH, } from '../constants/catalogs.constants';
+import { BookContentFormat } from '../enums/book-content-format.enum';
 import { BookProviderCode } from '../enums/book-provider-code.enum';
 import { CatalogHttpService } from '../http/catalog-http.service';
 import type { BookCatalogProvider } from '../interfaces/book-catalog-provider.interface';
 import type { CatalogSearchCriteria, ExternalBook, ExternalBookPage, } from '../interfaces/external-book.interface';
+import { NO_BOOK_CONTENT, toBookContent, type BookContent, } from '../utils/book-content.util';
 import { normalizeAuthorNames, normalizeLanguageCodes, toNullableText, toNullableUrl, truncate, } from '../utils/catalog-text.util';
 
 // Gutendex es la API JSON que publica el catálogo de Project Gutenberg.
@@ -19,12 +21,13 @@ const GUTENDEX_PAGE_SIZE = 32;
 // medio minuto, mientras que las siguientes responden en milisegundos.
 const GUTENDEX_REQUEST_TIMEOUT_MS = 20000;
 
-// Orden de preferencia del formato que se guarda como contenido de la obra.
-const CONTENT_MIME_PREFERENCES = [
-    'text/html',
-    'application/epub+zip',
-    'text/plain; charset=utf-8',
-    'text/plain',
+// Orden de preferencia del formato que se guarda como contenido de la obra,
+// con el formato que corresponde a cada tipo MIME que declara Gutendex.
+const CONTENT_MIME_PREFERENCES: readonly { mimeType: string; format: BookContentFormat }[] = [
+    { mimeType: 'text/html', format: BookContentFormat.HTML },
+    { mimeType: 'application/epub+zip', format: BookContentFormat.EPUB },
+    { mimeType: 'text/plain; charset=utf-8', format: BookContentFormat.TEXT },
+    { mimeType: 'text/plain', format: BookContentFormat.TEXT },
 ];
 
 // Formato preferido para la portada.
@@ -141,7 +144,7 @@ export class GutendexProvider implements BookCatalogProvider {
             // Gutendex publica una o varias sinopsis; se conserva la primera.
             description: toNullableText(book.summaries?.[0]),
             coverUrl: toNullableUrl(formats[COVER_MIME_TYPE]),
-            contentReference: this.resolveContentReference(formats),
+            ...this.resolveContent(formats),
             authors: normalizeAuthorNames(
                 (book.authors ?? []).map((author) => author.name),
             ),
@@ -149,15 +152,16 @@ export class GutendexProvider implements BookCatalogProvider {
         };
     }
 
-    // Elige el formato de lectura más conveniente entre los disponibles.
-    private resolveContentReference(
+    // Elige el formato de lectura más conveniente entre los disponibles y
+    // fija su formato a partir del tipo MIME con que Gutendex lo publica.
+    private resolveContent(
         formats: Record<string, string>,
-    ): string | null {
-        for (const mimeType of CONTENT_MIME_PREFERENCES) {
-            const candidate = toNullableUrl(formats[mimeType]);
+    ): BookContent {
+        for (const { mimeType, format } of CONTENT_MIME_PREFERENCES) {
+            const content = toBookContent(formats[mimeType], format);
 
-            if (candidate !== null) {
-                return candidate;
+            if (content.contentReference !== null) {
+                return content;
             }
         }
 
@@ -167,6 +171,28 @@ export class GutendexProvider implements BookCatalogProvider {
             ([mimeType]) => mimeType.startsWith('text/'),
         );
 
-        return fallback ? toNullableUrl(fallback[1]) : null;
+        if (!fallback) {
+            return NO_BOOK_CONTENT;
+        }
+
+        const [mimeType, url] = fallback;
+
+        return toBookContent(url, this.formatFromMimeType(mimeType));
+    }
+
+    // Traduce un tipo MIME de texto (por ejemplo `text/plain; charset=us-ascii`)
+    // al formato del catálogo. Lo que no sea HTML ni texto plano no se procesa.
+    private formatFromMimeType(mimeType: string): BookContentFormat {
+        const baseType = mimeType.split(';')[0]!.trim().toLowerCase();
+
+        if (baseType === 'text/html') {
+            return BookContentFormat.HTML;
+        }
+
+        if (baseType === 'text/plain') {
+            return BookContentFormat.TEXT;
+        }
+
+        return BookContentFormat.UNSUPPORTED;
     }
 }

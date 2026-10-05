@@ -1,10 +1,12 @@
 import { Injectable } from '@nestjs/common';
 
 import { BOOK_EXTERNAL_REFERENCE_MAX_LENGTH, BOOK_TITLE_MAX_LENGTH, } from '../constants/catalogs.constants';
+import { BookContentFormat } from '../enums/book-content-format.enum';
 import { BookProviderCode } from '../enums/book-provider-code.enum';
 import { CatalogHttpService } from '../http/catalog-http.service';
 import type { BookCatalogProvider } from '../interfaces/book-catalog-provider.interface';
 import type { CatalogSearchCriteria, ExternalBook, ExternalBookPage, } from '../interfaces/external-book.interface';
+import { NO_BOOK_CONTENT, toBookContent, type BookContent, } from '../utils/book-content.util';
 import { normalizeAuthorNames, normalizeLanguageCodes, toArray, toNullableText, toNullableUrl, truncate, } from '../utils/catalog-text.util';
 
 // Standard Ebooks no publica una API REST propia, pero su catálogo OPDS
@@ -19,10 +21,12 @@ const STANDARD_EBOOKS_IDENTIFIER_PREFIX = 'https://standardebooks.org/ebooks/';
 // Relación OPDS que marca la imagen de portada a tamaño completo.
 const OPDS_IMAGE_REL = 'http://opds-spec.org/image';
 
-// Orden de preferencia del formato que se ofrece como contenido.
-const CONTENT_TYPE_PREFERENCES = [
-    'application/epub+zip',
-    'application/xhtml+xml',
+// Orden de preferencia del formato que se ofrece como contenido, con el
+// formato que corresponde a cada tipo de enlace del feed OPDS. El XHTML es la
+// obra completa en una sola página (`/text/single-page`).
+const CONTENT_TYPE_PREFERENCES: readonly { contentType: string; format: BookContentFormat }[] = [
+    { contentType: 'application/epub+zip', format: BookContentFormat.EPUB },
+    { contentType: 'application/xhtml+xml', format: BookContentFormat.HTML },
 ];
 
 interface OpdsLink {
@@ -145,7 +149,7 @@ export class StandardEbooksProvider implements BookCatalogProvider {
             title,
             description: toNullableText(metadata.description),
             coverUrl: this.resolveCoverUrl(publication.images ?? []),
-            contentReference: this.resolveContentReference(publication.links ?? []),
+            ...this.resolveContent(publication.links ?? []),
             authors: normalizeAuthorNames(
                 toArray(metadata.author).map((author) => author.name),
             ),
@@ -180,22 +184,26 @@ export class StandardEbooksProvider implements BookCatalogProvider {
         return toNullableUrl((cover ?? images[0])?.href);
     }
 
-    // Elige el formato descargable más conveniente para leer la obra.
-    private resolveContentReference(links: OpdsLink[]): string | null {
-        for (const contentType of CONTENT_TYPE_PREFERENCES) {
+    // Elige el formato descargable más conveniente para leer la obra y fija
+    // su formato a partir del tipo con que el feed OPDS declara el enlace.
+    private resolveContent(links: OpdsLink[]): BookContent {
+        for (const { contentType, format } of CONTENT_TYPE_PREFERENCES) {
             const candidate = links.find((link) => link.type === contentType);
-            const href = toNullableUrl(candidate?.href);
+            const content = toBookContent(candidate?.href, format);
 
-            if (href !== null) {
-                return href;
+            if (content.contentReference !== null) {
+                return content;
             }
         }
 
-        // Como último recurso se enlaza la ficha pública de la obra.
+        // Como último recurso se enlaza la ficha pública de la obra: es una
+        // página sobre el libro, no el libro en sí.
         const alternate = links.find(
             (link) => toArray(link.rel).includes('alternate'),
         );
 
-        return toNullableUrl(alternate?.href);
+        return alternate
+            ? toBookContent(alternate.href, BookContentFormat.EXTERNAL_PAGE)
+            : NO_BOOK_CONTENT;
     }
 }

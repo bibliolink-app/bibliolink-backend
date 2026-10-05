@@ -1,3 +1,4 @@
+import { BookContentFormat } from '../enums/book-content-format.enum';
 import { BookProviderCode } from '../enums/book-provider-code.enum';
 
 // Representación uniforme de una obra devuelta por cualquier proveedor.
@@ -17,8 +18,13 @@ export interface ExternalBook {
 
     coverUrl: string | null;
 
-    // Enlace al contenido legible o descargable de la obra.
+    // Enlace al contenido legible o descargable de la obra. Es información
+    // interna: los endpoints públicos no lo exponen.
     contentReference: string | null;
+
+    // Formato del recurso de `contentReference`. Es `null` exactamente cuando
+    // `contentReference` es `null`. También es interno.
+    contentFormat: BookContentFormat | null;
 
     // Autores en el orden en que los publica el proveedor.
     authors: string[];

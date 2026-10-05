@@ -70,6 +70,24 @@ Una fecha de nacimiento futura deberá evaluarse como regla de validez del
 registro cuando se implemente ese caso de uso. No hay una edad mínima o máxima
 definida en esta etapa.
 
+## Migraciones
+
+El esquema base se creó fuera del repositorio; a partir de
+`AddBookContentFormat` los cambios se versionan como migraciones de TypeORM en
+[src/database/migrations/](src/database/migrations/). El CLI usa la conexión
+de [data-source.ts](src/database/data-source.ts) con los datos del `.env` y
+trabaja sobre el código compilado, por eso cada script compila primero.
+
+```bash
+pnpm migration:show     # lista las migraciones y cuáles ya se aplicaron
+pnpm migration:run      # aplica las pendientes
+pnpm migration:revert   # deshace la última
+```
+
+Después de traer cambios que incluyan una migración nueva hay que correr
+`pnpm migration:run`; si no, las consultas sobre la tabla afectada fallan con
+`Unknown column`.
+
 ## Proveedores de contenido (módulo `catalogs`)
 
 El módulo `catalogs` concentra la integración con las APIs públicas de las que
@@ -163,7 +181,6 @@ solo la primera obra de cada uno y las descripciones van recortadas:
           "title": "Dracula",
           "description": "\"Dracula\" by Bram Stoker is a Gothic horror novel published in 1897.",
           "coverUrl": "https://www.gutenberg.org/cache/epub/345/pg345.cover.medium.jpg",
-          "contentReference": "https://www.gutenberg.org/ebooks/345.html.images",
           "authors": ["Bram Stoker"],
           "languageCodes": ["en"]
         }
@@ -182,7 +199,6 @@ solo la primera obra de cada uno y las descripciones van recortadas:
           "title": "Dracula",
           "description": "An ancient undead monster terrorizes Victorian London.",
           "coverUrl": "https://standardebooks.org/ebooks/bram-stoker/dracula/downloads/cover.jpg",
-          "contentReference": "https://standardebooks.org/ebooks/bram-stoker/dracula/downloads/bram-stoker_dracula.epub?source=feed",
           "authors": ["Bram Stoker"],
           "languageCodes": ["en"]
         }
@@ -201,7 +217,6 @@ solo la primera obra de cada uno y las descripciones van recortadas:
           "title": "Dracula",
           "description": "'It was butcher work...the horrid screeching as the stake drove home'",
           "coverUrl": null,
-          "contentReference": "https://doi.org/10.1093/owc/9780199564095.001.0001",
           "authors": ["Bram Stoker"],
           "languageCodes": ["en"]
         }
@@ -249,7 +264,6 @@ curl "http://localhost:3000/catalogs/providers/standard-ebooks/book?reference=br
   "title": "Dracula",
   "description": "An ancient undead monster terrorizes Victorian London.",
   "coverUrl": "https://standardebooks.org/ebooks/bram-stoker/dracula/downloads/cover.jpg",
-  "contentReference": "https://standardebooks.org/ebooks/bram-stoker/dracula/downloads/bram-stoker_dracula.epub?source=feed",
   "authors": ["Bram Stoker"],
   "languageCodes": ["en"]
 }
@@ -296,6 +310,43 @@ en un servidor propio sin permiso del autor, y **OpenAlex** enlaza casi
 siempre a un PDF de un repositorio o editorial ajena cuyo copyright BiblioLink
 no tiene. Por eso `contentReference` y `coverUrl` siempre quedan como enlaces
 al proveedor original, nunca como archivos copiados.
+
+### Formato del contenido (uso interno)
+
+Cada obra guarda, junto a `content_reference`, el formato del recurso en
+`content_format`:
+
+| Valor | Significado |
+| --- | --- |
+| `PDF` | Documento PDF. |
+| `EPUB` | Libro EPUB. |
+| `HTML` | La obra completa como HTML o XHTML. |
+| `TEXT` | La obra completa como texto plano. |
+| `EXTERNAL_PAGE` | Una página sobre la obra (ficha, resumen, DOI, repositorio), no el contenido. No se puede leer en BiblioLink. |
+| `UNSUPPORTED` | Un archivo con el contenido, en un formato que no se procesa. |
+| `NULL` | Sin contenido, o una obra importada antes de que existiera la columna. |
+
+El formato lo fija cada proveedor **en el mismo momento en que elige el
+enlace**, a partir del tipo que el propio proveedor declara; nunca se deduce
+mirando la extensión de la URL:
+
+| Proveedor | De dónde sale el formato |
+| --- | --- |
+| Gutendex | El tipo MIME de cada entrada de `formats` (`text/html` → `HTML`, `application/epub+zip` → `EPUB`, `text/plain` → `TEXT`, otro `text/*` → `UNSUPPORTED`). |
+| Standard Ebooks | El `type` del enlace OPDS (`application/epub+zip` → `EPUB`, `application/xhtml+xml` → `HTML`). Si solo queda la ficha pública, `EXTERNAL_PAGE`. |
+| arXiv | El enlace marcado `title="pdf"` o `type="application/pdf"` → `PDF`. La página de resumen (`/abs/`) → `EXTERNAL_PAGE`. |
+| OpenAlex | Solo `pdf_url` → `PDF`. La página de aterrizaje, `oa_url` (puede ser cualquier cosa) y el DOI → `EXTERNAL_PAGE`. Se prefiere un `pdf_url` antes que cualquier página. |
+
+`content_reference` y `content_format` son **internos**: no aparecen en
+`BookDetailResponseDto` ni en las respuestas de `catalogs`, que copian campo
+por campo solo lo público. El único acceso es
+`BooksService.getReadingSource(bookId)`, que devuelve
+`{ bookId, contentReference, contentFormat }` para que `reading` decida si el
+usuario puede leer la obra y cómo entregarla. No tiene endpoint.
+
+Las obras importadas antes de la columna quedan con `NULL` hasta que se
+vuelvan a importar con `POST /books/import` (o una carga masiva), que
+actualiza enlace y formato juntos.
 
 ### Cómo se guarda una obra
 
@@ -353,7 +404,6 @@ curl -X POST http://localhost:3000/books/import \
   "title": "Dracula",
   "description": "\"Dracula\" by Bram Stoker is a Gothic horror novel published in 1897...",
   "coverUrl": "https://www.gutenberg.org/cache/epub/345/pg345.cover.medium.jpg",
-  "contentReference": "https://www.gutenberg.org/ebooks/345.html.images",
   "authors": ["Bram Stoker"],
   "languages": [{ "languageCode": "en", "name": "English" }],
   "createdAt": "2026-09-27T18:08:35.083Z",
@@ -559,7 +609,6 @@ curl -X POST http://localhost:3000/favorites/external \
     "title": "Pride and Prejudice",
     "description": "...",
     "coverUrl": "https://www.gutenberg.org/cache/epub/1342/pg1342.cover.medium.jpg",
-    "contentReference": "https://www.gutenberg.org/ebooks/1342.html.images",
     "authors": ["Jane Austen"],
     "languages": [{ "languageCode": "en", "name": "English" }],
     "createdAt": "2026-10-01T15:17:41.902Z",

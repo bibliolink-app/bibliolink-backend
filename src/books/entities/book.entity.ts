@@ -1,6 +1,7 @@
 import { Column, CreateDateColumn, Entity, JoinColumn, ManyToOne, PrimaryGeneratedColumn, Unique, UpdateDateColumn, } from 'typeorm';
 
 import { BookProvider } from '../../catalogs/entities/book-provider.entity';
+import { BookContentFormat } from '../../catalogs/enums/book-content-format.enum';
 
 @Entity({ name: 'books' })
 @Unique('UQ_books_provider_external_reference', ['providerId', 'externalReference'])
@@ -23,8 +24,15 @@ export class Book {
     @Column({ name: 'cover_url', type: 'varchar', length: 2048, nullable: true, })
     coverUrl!: string | null;
 
+    // Enlace al contenido y su formato. Son internos: solo `reading` los usa,
+    // a través de `BooksService.getReadingSource`, y nunca llegan al cliente.
     @Column({ name: 'content_reference', type: 'varchar', length: 2048, nullable: true, })
     contentReference!: string | null;
+
+    // `null` cuando no hay contenido, o en obras importadas antes de que
+    // existiera esta columna (hasta que se vuelvan a importar).
+    @Column({ name: 'content_format', type: 'enum', enum: BookContentFormat, nullable: true, })
+    contentFormat!: BookContentFormat | null;
 
     @CreateDateColumn({ name: 'created_at', type: 'datetime', precision: 3,  default: () => 'CURRENT_TIMESTAMP(3)',})
     createdAt!: Date;

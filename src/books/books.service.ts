@@ -21,6 +21,7 @@ import { BookAuthor } from './entities/book-author.entity';
 import { BookLanguage } from './entities/book-language.entity';
 import { Book } from './entities/book.entity';
 import { Language } from './entities/language.entity';
+import type { BookReadingSource } from './interfaces/book-reading-source.interface';
 import type { BulkImportResult, FailedImportSummary, ImportedBookSummary, ImportSearchResult, } from './interfaces/import-result.interface';
 
 // Resultado interno de guardar una obra externa en `books`.
@@ -117,6 +118,32 @@ export class BooksService {
         }
 
         return this.importByReference(importBookDto);
+    }
+
+    // Devuelve el enlace al contenido de una obra y su formato. Es de uso
+    // interno entre módulos (lo consume `reading`) y no tiene endpoint: el
+    // resultado incluye la URL original, que nunca debe llegar al cliente.
+    async getReadingSource(bookId: number): Promise<BookReadingSource> {
+        this.logger.debug({ bookId, operation: 'getReadingSource' }, 'Looking up reading source');
+
+        const book = await this.booksRepository.findOne({
+            select: {
+                bookId: true,
+                contentReference: true,
+                contentFormat: true,
+            },
+            where: { bookId },
+        });
+
+        if (!book) {
+            throw new NotFoundException('El libro no existe.');
+        }
+
+        return {
+            bookId: book.bookId,
+            contentReference: book.contentReference,
+            contentFormat: book.contentFormat,
+        };
     }
 
     // Recupera una obra guardada localmente por su identificador interno.
@@ -473,7 +500,10 @@ export class BooksService {
                 book.title = externalBook.title;
                 book.description = externalBook.description;
                 book.coverUrl = externalBook.coverUrl;
+                // El formato viaja siempre con su enlace: si el proveedor
+                // cambió de recurso, ambos se actualizan juntos.
                 book.contentReference = externalBook.contentReference;
+                book.contentFormat = externalBook.contentFormat;
 
                 await bookRepository.save(book);
                 status = 'updated';
@@ -485,6 +515,7 @@ export class BooksService {
                     description: externalBook.description,
                     coverUrl: externalBook.coverUrl,
                     contentReference: externalBook.contentReference,
+                    contentFormat: externalBook.contentFormat,
                 });
 
                 try {

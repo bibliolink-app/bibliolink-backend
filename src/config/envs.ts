@@ -41,6 +41,8 @@ interface EnvVars {
 
     // READING
     READING_FREE_PERIOD_MINUTES: number;
+    READING_CONTENT_REQUEST_TIMEOUT_MS: number;
+    READING_CONTENT_MAX_BYTES: number;
 
     // CAPTCHA
     CAPTCHA_SECRET_KEY: string;
@@ -110,6 +112,8 @@ const envsSchema = joi.object<EnvVars>({
 
     // READING
     READING_FREE_PERIOD_MINUTES: joi.number().integer().positive().default(10),
+    READING_CONTENT_REQUEST_TIMEOUT_MS: joi.number().integer().positive().default(10000),
+    READING_CONTENT_MAX_BYTES: joi.number().integer().positive().default(52428800),
 
     // CAPTCHA
     CAPTCHA_SECRET_KEY: joi.string().required(),
@@ -213,6 +217,8 @@ export const envs = {
     reading: {
         freePeriodMinutes: envVars.READING_FREE_PERIOD_MINUTES,
         freePeriodMs: envVars.READING_FREE_PERIOD_MINUTES * 60_000,
+        contentRequestTimeoutMs: envVars.READING_CONTENT_REQUEST_TIMEOUT_MS,
+        contentMaxBytes: envVars.READING_CONTENT_MAX_BYTES,
     },
 
     // CAPTCHA

@@ -1,0 +1,5 @@
+export const TARGET_PAGE_CHARACTERS = 6_000;
+
+export const PDF_RENDER_SCALE = 1.5;
+export const PDF_MAX_CANVAS_DIMENSION = 8_192;
+export const PDF_MAX_CANVAS_PIXELS = 16_777_216;

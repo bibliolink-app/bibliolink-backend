@@ -1,4 +1,4 @@
-import { Body, Controller, HttpCode, HttpStatus, Param, ParseIntPipe, Post, UseGuards, } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, HttpStatus, Param, ParseIntPipe, Post, UseGuards, } from '@nestjs/common';
 
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -10,6 +10,7 @@ import { ReadingAccessResponseDto } from './dto/reading-access-response.dto';
 import { ReadingService } from './reading.service';
 import { RewardChallengeResponseDto } from './dto/reward-challenge-response.dto';
 import { RedeemRewardedAdDto } from './dto/redeem-rewarded-ad.dto';
+import { ReadingPageResponseDto } from './dto/reading-page-response.dto';
 import { ReadingRewardResponseDto } from './dto/reading-reward-response.dto';
 
 @Controller('reading')
@@ -34,11 +35,16 @@ export class ReadingController {
 
 
   @Post('reward')
-@HttpCode(HttpStatus.OK)
-redeemRewardedAd( @CurrentUser() currentUser: AuthenticatedUser, @Body() redeemRewardedAdDto: RedeemRewardedAdDto, ): Promise<ReadingRewardResponseDto> {
+  @HttpCode(HttpStatus.OK)
+  redeemRewardedAd(@CurrentUser() currentUser: AuthenticatedUser, @Body() redeemRewardedAdDto: RedeemRewardedAdDto,): Promise<ReadingRewardResponseDto> {
     return this.readingService.redeemRewardedAd(
-        currentUser.userId,
-        redeemRewardedAdDto.token,
+      currentUser.userId,
+      redeemRewardedAdDto.token,
     );
-}
+  }
+
+  @Get('books/:bookId/pages/:pageNumber')
+  getReadingPage(@CurrentUser() currentUser: AuthenticatedUser, @Param('bookId', ParseIntPipe) bookId: number, @Param('pageNumber', ParseIntPipe) pageNumber: number): Promise<ReadingPageResponseDto> {
+    return this.readingService.getReadingPage(currentUser.userId, bookId, pageNumber);
+  }
 }

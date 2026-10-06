@@ -1,4 +1,4 @@
-import { Injectable, ConflictException } from '@nestjs/common';
+import { ConflictException, ForbiddenException, Injectable, UnprocessableEntityException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
@@ -14,6 +14,25 @@ import { AdsService } from '../ads/ads.service';
 import { RewardChallengeResponseDto } from './dto/reward-challenge-response.dto';
 import { ReadingRewardResponseDto } from './dto/reading-reward-response.dto';
 
+import { BookContentFormat } from '../catalogs/enums/book-content-format.enum';
+import type { BookReadingSource } from '../books/interfaces/book-reading-source.interface';
+import { ReadingContentService } from './content/reading-content.service';
+import { ReadingPageResponseDto } from './dto/reading-page-response.dto';
+
+
+
+type ReadableBookContentFormat =
+  | BookContentFormat.PDF
+  | BookContentFormat.EPUB
+  | BookContentFormat.HTML
+  | BookContentFormat.TEXT;
+
+type ReadableBookSource = Omit<BookReadingSource, 'contentReference' | 'contentFormat'> & {
+  contentReference: string;
+  contentFormat: ReadableBookContentFormat;
+};
+
+
 @Injectable()
 export class ReadingService {
   constructor(
@@ -23,10 +42,13 @@ export class ReadingService {
     private readonly favoritesService: FavoritesService,
     private readonly subscriptionsService: SubscriptionsService,
     private readonly adsService: AdsService,
+    private readonly readingContentService: ReadingContentService,
   ) { }
 
   async startReading(userId: number, bookId: number): Promise<ReadingAccessResponseDto> {
-    await this.booksService.findOne(bookId);
+    const source = await this.booksService.getReadingSource(bookId);
+
+    this.ensureReadableSource(source);
 
     const [hasPremiumAccess, readingState] = await Promise.all([
       this.subscriptionsService.hasPremiumAccess(userId),
@@ -81,49 +103,59 @@ export class ReadingService {
     return this.adsService.issueRewardChallenge(userId);
   }
 
-async redeemRewardedAd(userId: number, token: string): Promise<ReadingRewardResponseDto> {
+  async redeemRewardedAd(userId: number, token: string): Promise<ReadingRewardResponseDto> {
     const hasPremiumAccess = await this.subscriptionsService.hasPremiumAccess(userId);
 
     if (hasPremiumAccess) {
-        throw new ConflictException('Los usuarios Premium no requieren recompensas para continuar leyendo.');
+      throw new ConflictException('Los usuarios Premium no requieren recompensas para continuar leyendo.');
     }
 
     return this.readingAccessRepository.manager.transaction(async (manager) => {
-        const readingAccessRepository = manager.getRepository(ReadingAccess);
+      const readingAccessRepository = manager.getRepository(ReadingAccess);
 
-        const access = await readingAccessRepository
-            .createQueryBuilder('readingAccess')
-            .setLock('pessimistic_write')
-            .where('readingAccess.userId = :userId', { userId })
-            .getOne();
+      const access = await readingAccessRepository
+        .createQueryBuilder('readingAccess')
+        .setLock('pessimistic_write')
+        .where('readingAccess.userId = :userId', { userId })
+        .getOne();
 
-        if (!access) {
-            throw new ConflictException('Primero debe iniciar un periodo de lectura.');
-        }
+      if (!access) {
+        throw new ConflictException('Primero debe iniciar un periodo de lectura.');
+      }
 
-        const now = new Date();
+      const now = new Date();
 
-        if (access.expiresAt > now) {
-            throw new ConflictException('El periodo de lectura actual todavía está vigente.');
-        }
+      if (access.expiresAt > now) {
+        throw new ConflictException('El periodo de lectura actual todavía está vigente.');
+      }
 
-        const consumed = await this.adsService.consumeRewardChallenge(userId, token, manager);
+      const consumed = await this.adsService.consumeRewardChallenge(userId, token, manager);
 
-        if (!consumed) {
-            throw new ConflictException('La recompensa no es válida, expiró o ya fue utilizada.');
-        }
+      if (!consumed) {
+        throw new ConflictException('La recompensa no es válida, expiró o ya fue utilizada.');
+      }
 
-        access.expiresAt = new Date(now.getTime() + envs.reading.freePeriodMs);
+      access.expiresAt = new Date(now.getTime() + envs.reading.freePeriodMs);
 
-        await readingAccessRepository.save(access);
+      await readingAccessRepository.save(access);
 
-        return {
-            canRead: true,
-            expiresAt: access.expiresAt,
-            serverTime: now,
-        };
+      return {
+        canRead: true,
+        expiresAt: access.expiresAt,
+        serverTime: now,
+      };
     });
-}
+  }
+
+  async getReadingPage(userId: number, bookId: number, pageNumber: number): Promise<ReadingPageResponseDto> {
+    const source = await this.getAuthorizedReadingSource(userId, bookId);
+
+    return this.readingContentService.getPage(
+      source.contentReference,
+      source.contentFormat,
+      pageNumber,
+    );
+  }
 
 
 
@@ -158,5 +190,40 @@ async redeemRewardedAd(userId: number, token: string): Promise<ReadingRewardResp
 
       return concurrentAccess;
     }
+  }
+
+  private ensureReadableSource(source: BookReadingSource): asserts source is ReadableBookSource {
+    if (!source.contentReference || !source.contentFormat) {
+      throw new UnprocessableEntityException('El libro no tiene contenido disponible para lectura.');
+    }
+
+    if (
+      source.contentFormat === BookContentFormat.EXTERNAL_PAGE ||
+      source.contentFormat === BookContentFormat.UNSUPPORTED
+    ) {
+      throw new UnprocessableEntityException('El formato del contenido no es compatible con el lector.');
+    }
+  }
+
+  private async getAuthorizedReadingSource(userId: number, bookId: number): Promise<ReadableBookSource> {
+    const source = await this.booksService.getReadingSource(bookId);
+    this.ensureReadableSource(source);
+
+    const hasPremiumAccess = await this.subscriptionsService.hasPremiumAccess(userId);
+
+    if (!hasPremiumAccess) {
+      const access = await this.readingAccessRepository.findOne({
+        where: { userId },
+      });
+
+      if (!access) {
+        throw new ForbiddenException('Primero debe iniciar un periodo de lectura.');
+      }
+
+      if (access.expiresAt <= new Date()) {
+        throw new ForbiddenException('El periodo de lectura ha expirado.');
+      }
+    }
+    return source;
   }
 }

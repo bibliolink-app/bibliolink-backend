@@ -10,11 +10,13 @@ import { ReadingAccess } from './entities/reading-access.entity';
 import { ReadingController } from './reading.controller';
 import { ReadingService } from './reading.service';
 import { ReadingContentModule } from './content/reading-content.module';
+import { PassportModule } from '@nestjs/passport';
 
 @Module({
     imports: [
         TypeOrmModule.forFeature([ReadingAccess]),
         AuthModule,
+        PassportModule.register({ session: false }),
         BooksModule,
         FavoritesModule,
         SubscriptionsModule,

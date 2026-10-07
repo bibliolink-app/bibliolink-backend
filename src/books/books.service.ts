@@ -8,6 +8,8 @@ import { CatalogsService } from '../catalogs/catalogs.service';
 import { SearchCatalogDto } from '../catalogs/dto/search-catalog.dto';
 import { BookProviderCode } from '../catalogs/enums/book-provider-code.enum';
 import type { ExternalBook } from '../catalogs/interfaces/external-book.interface';
+import { BookCategory } from '../categories/entities/book-category.entity';
+import { Category } from '../categories/entities/category.entity';
 import { isMySqlUniqueViolation } from '../common/databases/is-mysql-unique-violation';
 import { BOOKS_BULK_IMPORT_DEFAULT_MAX_PAGES } from './constants/books.constants';
 import { resolveLanguageName } from './data/language-names';
@@ -42,6 +44,8 @@ export class BooksService {
         @InjectRepository(BookAuthor)
         private readonly bookAuthorsRepository: Repository<BookAuthor>,
 
+        @InjectRepository(BookCategory)
+        private readonly bookCategoriesRepository: Repository<BookCategory>,
         @InjectRepository(BookLanguage)
         private readonly bookLanguagesRepository: Repository<BookLanguage>,
 
@@ -160,15 +164,17 @@ export class BooksService {
             throw new NotFoundException('El libro no existe.');
         }
 
-        const [authorsByBook, languagesByBook] = await Promise.all([
+        const [authorsByBook, languagesByBook, categoriesByBook] = await Promise.all([
             this.loadAuthorsByBookIds([bookId]),
             this.loadLanguagesByBookIds([bookId]),
+             this.loadCategoriesByBookIds([bookId]),
         ]);
 
         return this.toDetailDto(
             book,
             authorsByBook.get(bookId) ?? [],
             languagesByBook.get(bookId) ?? [],
+            categoriesByBook.get(bookId) ?? [],
         );
     }
 
@@ -486,7 +492,8 @@ export class BooksService {
             const bookAuthorRepository = manager.getRepository(BookAuthor);
             const bookLanguageRepository = manager.getRepository(BookLanguage);
             const languageRepository = manager.getRepository(Language);
-
+            const categoryRepository = manager.getRepository(Category);
+            const bookCategoryRepository = manager.getRepository(BookCategory);
             let book = await bookRepository.findOne({
                 where: {
                     providerId,
@@ -550,6 +557,14 @@ export class BooksService {
                 book.bookId,
                 externalBook.languageCodes,
             );
+
+             await this.replaceCategories(
+                categoryRepository,
+                bookCategoryRepository,
+                book.bookId,
+                externalBook.categoryNames,
+            );
+
 
             return { bookId: book.bookId, status };
         });
@@ -690,9 +705,10 @@ export class BooksService {
 
         const bookIds = books.map((book) => book.bookId);
 
-        const [authorsByBook, languagesByBook] = await Promise.all([
+                const [authorsByBook, languagesByBook, categoriesByBook] = await Promise.all([
             this.loadAuthorsByBookIds(bookIds),
             this.loadLanguagesByBookIds(bookIds),
+            this.loadCategoriesByBookIds(bookIds),
         ]);
 
         return books.map((book) =>
@@ -700,8 +716,10 @@ export class BooksService {
                 book,
                 authorsByBook.get(book.bookId) ?? [],
                 languagesByBook.get(book.bookId) ?? [],
+                categoriesByBook.get(book.bookId) ?? [],
             ),
         );
+        
     }
 
     // Traduce una fila de `books` (más sus autores e idiomas ya resueltos)
@@ -710,6 +728,7 @@ export class BooksService {
         book: Book,
         authors: string[],
         languages: BookLanguageResponseDto[],
+        categories: string[],
     ): BookDetailResponseDto {
         return {
             bookId: book.bookId,
@@ -721,8 +740,92 @@ export class BooksService {
             coverUrl: book.coverUrl,
             authors,
             languages,
+             categories,
+
             createdAt: book.createdAt,
             updatedAt: book.updatedAt,
         };
+    }
+
+        // Trae, en una sola consulta, las categorías de varias obras a la vez.
+    private async loadCategoriesByBookIds(
+        bookIds: number[],
+    ): Promise<Map<number, string[]>> {
+        const bookCategories = await this.bookCategoriesRepository.find({
+            where: { bookId: In(bookIds) },
+            relations: { category: true },
+        });
+
+        const categoriesByBook = new Map<number, string[]>();
+
+        for (const bookCategory of bookCategories) {
+            const categoriesForBook = categoriesByBook.get(bookCategory.bookId) ?? [];
+            categoriesForBook.push(bookCategory.category.name);
+            categoriesByBook.set(bookCategory.bookId, categoriesForBook);
+        }
+
+        return categoriesByBook;
+    }
+
+    // Reemplaza la lista completa de categorías de una obra, creando primero
+    // en `categories` los nombres que todavía no existan.
+    private async replaceCategories(
+        categoryRepository: Repository<Category>,
+        bookCategoryRepository: Repository<BookCategory>,
+        bookId: number,
+        categoryNames: readonly string[],
+    ): Promise<void> {
+        const categoryIds: number[] = [];
+
+        for (const name of categoryNames) {
+            categoryIds.push(
+                await this.ensureCategoryExists(categoryRepository, name),
+            );
+        }
+
+        await bookCategoryRepository.delete({ bookId });
+
+        if (categoryIds.length === 0) {
+            return;
+        }
+
+        const rows = categoryIds.map((categoryId) =>
+            bookCategoryRepository.create({ bookId, categoryId }),
+        );
+
+        await bookCategoryRepository.save(rows);
+    }
+
+    // Crea la categoría si todavía no existe y devuelve su identificador.
+    // Usa la misma detección de duplicados que el resto del proyecto para
+    // tolerar dos importaciones simultáneas.
+    private async ensureCategoryExists(
+        categoryRepository: Repository<Category>,
+        name: string,
+    ): Promise<number> {
+        const existente = await categoryRepository.findOne({ where: { name } });
+
+        if (existente) {
+            return existente.categoryId;
+        }
+
+        try {
+            const creada = await categoryRepository.save(
+                categoryRepository.create({ name }),
+            );
+
+            return creada.categoryId;
+        } catch (error: unknown) {
+            if (!isMySqlUniqueViolation(error)) {
+                throw error;
+            }
+
+            // Otra importación ganó la carrera; se recupera la que quedó.
+            const ganadora = await categoryRepository.findOneOrFail({
+                where: { name },
+            });
+
+            return ganadora.categoryId;
+        }
     }
 }

@@ -154,6 +154,8 @@ export class StandardEbooksProvider implements BookCatalogProvider {
                 toArray(metadata.author).map((author) => author.name),
             ),
             languageCodes: normalizeLanguageCodes(metadata.language),
+            // Este proveedor todavia no expone categorias.
+            categoryNames: [],
         };
     }
 

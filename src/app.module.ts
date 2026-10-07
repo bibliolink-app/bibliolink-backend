@@ -18,6 +18,7 @@ import { AdsModule } from './ads/ads.module';
 import { ReadingModule } from './reading/reading.module';
 import { SeedModule } from './seed/seed.module';
 import { AnalyticsModule } from './analytics/analytics.module';
+import { CategoriesModule } from './categories/categories.module';
 
 @Module({
     imports: [
@@ -47,6 +48,7 @@ import { AnalyticsModule } from './analytics/analytics.module';
         AdsModule,
         ReadingModule,
         AnalyticsModule,
+        CategoriesModule,
     ],
 
     providers: [

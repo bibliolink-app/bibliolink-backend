@@ -197,6 +197,8 @@ export class ArxivProvider implements BookCatalogProvider {
                 toArray(entry.author).map((author) => author.name),
             ),
             languageCodes: [ARXIV_DEFAULT_LANGUAGE],
+            // Este proveedor todavia no expone categorias.
+            categoryNames: [],
         };
     }
 

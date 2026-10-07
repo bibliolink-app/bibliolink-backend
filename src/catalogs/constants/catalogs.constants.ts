@@ -22,6 +22,11 @@ export const BOOK_TITLE_MAX_LENGTH = 500;
 export const BOOK_URL_MAX_LENGTH = 2048;
 export const BOOK_AUTHOR_NAME_MAX_LENGTH = 255;
 export const BOOK_LANGUAGE_CODE_MAX_LENGTH = 10;
+export const BOOK_CATEGORY_NAME_MAX_LENGTH = 150;
 
 // `book_authors` ordena a los autores en una columna `tinyint` sin signo.
 export const BOOK_MAX_AUTHORS = 255;
+
+// Tope de categorias por obra: algunos proveedores publican decenas de
+// descriptores muy especificos y solo las primeras aportan informacion util.
+export const BOOK_MAX_CATEGORIES = 20;

@@ -166,6 +166,8 @@ export class OpenAlexProvider implements BookCatalogProvider {
                 ),
             ),
             languageCodes: normalizeLanguageCodes(work.language),
+            // Este proveedor todavia no expone categorias.
+            categoryNames: [],
         };
     }
 

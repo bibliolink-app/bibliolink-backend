@@ -24,6 +24,9 @@ export class BookDetailResponseDto {
 
     languages!: BookLanguageResponseDto[];
 
+    // Nombres de las categorias de la obra.
+    categories!: string[];
+
     createdAt!: Date;
 
     updatedAt!: Date;

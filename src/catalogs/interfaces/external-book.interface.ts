@@ -31,6 +31,10 @@ export interface ExternalBook {
 
     // Códigos de idioma normalizados (por ejemplo `en`, `es`).
     languageCodes: string[];
+
+    // Categorías tal como las publica el proveedor, ya normalizadas.
+    // Queda vacío cuando el proveedor no las ofrece.
+    categoryNames: string[];
 }
 
 // Página de resultados de un proveedor.

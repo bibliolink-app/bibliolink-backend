@@ -9,6 +9,7 @@ import { CatalogHttpService } from '../http/catalog-http.service';
 import type { BookCatalogProvider } from '../interfaces/book-catalog-provider.interface';
 import type { CatalogSearchCriteria, ExternalBook, ExternalBookPage, } from '../interfaces/external-book.interface';
 import { toBookContent, type BookContent, } from '../utils/book-content.util';
+import { mapArxivCategories } from '../mappings/arxiv-categories.mapping';
 import { normalizeAuthorNames, toArray, toNullableText, toNullableUrl, truncate, } from '../utils/catalog-text.util';
 
 // arXiv publica su API como un feed Atom, no como JSON.
@@ -40,12 +41,20 @@ interface AtomAuthor {
     name?: string;
 }
 
+// Categoría de la taxonomía de arXiv (`<category term="cs.LG"/>`).
+interface AtomCategory {
+    '@_term'?: string;
+}
+
 interface AtomEntry {
     id?: string;
     title?: string;
     summary?: string;
     author?: AtomAuthor | AtomAuthor[];
     link?: AtomLink | AtomLink[];
+    category?: AtomCategory | AtomCategory[];
+    // `arxiv:primary_category`; el prefijo se quita al leer el XML.
+    primary_category?: AtomCategory;
 }
 
 interface AtomFeed {
@@ -197,8 +206,12 @@ export class ArxivProvider implements BookCatalogProvider {
                 toArray(entry.author).map((author) => author.name),
             ),
             languageCodes: [ARXIV_DEFAULT_LANGUAGE],
-            // Este proveedor todavia no expone categorias.
-            categoryNames: [],
+            categoryCodes: mapArxivCategories(
+                entry.primary_category?.['@_term'],
+                toArray(entry.category)
+                    .map((category) => category['@_term'])
+                    .filter((term): term is string => typeof term === 'string'),
+            ),
         };
     }
 

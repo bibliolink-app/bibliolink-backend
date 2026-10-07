@@ -1,4 +1,4 @@
-import { BOOK_AUTHOR_NAME_MAX_LENGTH, BOOK_CATEGORY_NAME_MAX_LENGTH, BOOK_LANGUAGE_CODE_MAX_LENGTH, BOOK_MAX_AUTHORS, BOOK_MAX_CATEGORIES, BOOK_URL_MAX_LENGTH, } from '../constants/catalogs.constants';
+import { BOOK_AUTHOR_NAME_MAX_LENGTH, BOOK_LANGUAGE_CODE_MAX_LENGTH, BOOK_MAX_AUTHORS, BOOK_URL_MAX_LENGTH, } from '../constants/catalogs.constants';
 
 // Herramientas compartidas para limpiar el texto que llega de las APIs
 // externas antes de exponerlo o guardarlo en la base de datos.
@@ -124,35 +124,4 @@ export function toArray<T>(value: T | T[] | undefined | null): T[] {
     }
 
     return Array.isArray(value) ? value : [value];
-}
-
-// Deja la lista de categorías lista para `categories`: sin vacíos, sin
-// repetidos, recortada al largo de la columna y al máximo de filas.
-// Varios proveedores publican el mismo descriptor con distinta capitalización,
-// así que la comparación de duplicados ignora mayúsculas.
-export function normalizeCategoryNames(values: readonly unknown[]): string[] {
-    const vistos = new Map<string, string>();
-
-    for (const value of values) {
-        if (typeof value !== 'string') {
-            continue;
-        }
-
-        const limpio = truncate(
-            collapseWhitespace(value),
-            BOOK_CATEGORY_NAME_MAX_LENGTH,
-        );
-
-        if (limpio.length === 0) {
-            continue;
-        }
-
-        const clave = limpio.toLowerCase();
-
-        if (!vistos.has(clave)) {
-            vistos.set(clave, limpio);
-        }
-    }
-
-    return [...vistos.values()].slice(0, BOOK_MAX_CATEGORIES);
 }

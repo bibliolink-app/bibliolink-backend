@@ -7,6 +7,7 @@ import { CatalogHttpService } from '../http/catalog-http.service';
 import type { BookCatalogProvider } from '../interfaces/book-catalog-provider.interface';
 import type { CatalogSearchCriteria, ExternalBook, ExternalBookPage, } from '../interfaces/external-book.interface';
 import { NO_BOOK_CONTENT, toBookContent, type BookContent, } from '../utils/book-content.util';
+import { mapStandardEbooksCategories, type StandardEbooksSubject, } from '../mappings/standard-ebooks-categories.mapping';
 import { normalizeAuthorNames, normalizeLanguageCodes, toArray, toNullableText, toNullableUrl, truncate, } from '../utils/catalog-text.util';
 
 // Standard Ebooks no publica una API REST propia, pero su catálogo OPDS
@@ -47,6 +48,10 @@ interface OpdsPublication {
         description?: string;
         language?: string | string[];
         author?: OpdsAuthor | OpdsAuthor[];
+        // Temas de la obra, cada uno con el vocabulario al que pertenece.
+        belongsTo?: {
+            subjects?: StandardEbooksSubject | StandardEbooksSubject[];
+        };
     };
     images?: OpdsLink[];
     links?: OpdsLink[];
@@ -154,8 +159,11 @@ export class StandardEbooksProvider implements BookCatalogProvider {
                 toArray(metadata.author).map((author) => author.name),
             ),
             languageCodes: normalizeLanguageCodes(metadata.language),
-            // Este proveedor todavia no expone categorias.
-            categoryNames: [],
+            // Se usan solo los temas del vocabulario propio de Standard
+            // Ebooks; los LCSH que vienen junto a ellos son demasiado específicos.
+            categoryCodes: mapStandardEbooksCategories(
+                toArray(metadata.belongsTo?.subjects),
+            ),
         };
     }
 

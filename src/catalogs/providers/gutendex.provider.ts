@@ -4,10 +4,11 @@ import { BOOK_EXTERNAL_REFERENCE_MAX_LENGTH, BOOK_TITLE_MAX_LENGTH, } from '../c
 import { BookContentFormat } from '../enums/book-content-format.enum';
 import { BookProviderCode } from '../enums/book-provider-code.enum';
 import { CatalogHttpService } from '../http/catalog-http.service';
+import { mapGutendexCategories } from '../mappings/gutendex-categories.mapping';
 import type { BookCatalogProvider } from '../interfaces/book-catalog-provider.interface';
 import type { CatalogSearchCriteria, ExternalBook, ExternalBookPage, } from '../interfaces/external-book.interface';
 import { NO_BOOK_CONTENT, toBookContent, type BookContent, } from '../utils/book-content.util';
-import { normalizeAuthorNames, normalizeCategoryNames, normalizeLanguageCodes, toNullableText, toNullableUrl, truncate, } from '../utils/catalog-text.util';
+import { normalizeAuthorNames, normalizeLanguageCodes, toNullableText, toNullableUrl, truncate, } from '../utils/catalog-text.util';
 
 // Gutendex es la API JSON que publica el catálogo de Project Gutenberg.
 const GUTENDEX_BOOKS_URL = 'https://gutendex.com/books/';
@@ -153,11 +154,12 @@ export class GutendexProvider implements BookCatalogProvider {
             ),
             languageCodes: normalizeLanguageCodes(book.languages),
             // Gutendex separa los temas (`subjects`) de las colecciones
-            // editoriales (`bookshelves`); ambos sirven para clasificar.
-            categoryNames: normalizeCategoryNames([
-                ...(book.subjects ?? []),
-                ...(book.bookshelves ?? []),
-            ]),
+            // (`bookshelves`); las curadas se traducen directamente y los
+            // temas solo se usan si no hay ninguna curada.
+            categoryCodes: mapGutendexCategories(
+                book.subjects ?? [],
+                book.bookshelves ?? [],
+            ),
         };
     }
 

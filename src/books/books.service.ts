@@ -6,6 +6,7 @@ import { In, Repository } from 'typeorm';
 import { CATALOG_DEFAULT_PAGE_SIZE } from '../catalogs/constants/catalogs.constants';
 import { CatalogsService } from '../catalogs/catalogs.service';
 import { SearchCatalogDto } from '../catalogs/dto/search-catalog.dto';
+import { BookCategoryCode } from '../catalogs/enums/book-category-code.enum';
 import { BookProviderCode } from '../catalogs/enums/book-provider-code.enum';
 import type { ExternalBook } from '../catalogs/interfaces/external-book.interface';
 import { BookCategory } from '../categories/entities/book-category.entity';
@@ -13,6 +14,7 @@ import { Category } from '../categories/entities/category.entity';
 import { isMySqlUniqueViolation } from '../common/databases/is-mysql-unique-violation';
 import { BOOKS_BULK_IMPORT_DEFAULT_MAX_PAGES } from './constants/books.constants';
 import { resolveLanguageName } from './data/language-names';
+import { BookCategoryResponseDto } from './dto/book-category-response.dto';
 import { BookDetailResponseDto } from './dto/book-detail-response.dto';
 import { BookLanguageResponseDto } from './dto/book-language-response.dto';
 import { BulkImportBooksDto } from './dto/bulk-import-books.dto';
@@ -46,6 +48,7 @@ export class BooksService {
 
         @InjectRepository(BookCategory)
         private readonly bookCategoriesRepository: Repository<BookCategory>,
+
         @InjectRepository(BookLanguage)
         private readonly bookLanguagesRepository: Repository<BookLanguage>,
 
@@ -96,6 +99,36 @@ export class BooksService {
             .getMany();
 
         return this.toDetailDtos(books);
+    }
+
+    // Página de obras guardadas que pertenecen a una categoría, ordenadas por
+    // título. Lo usa `categories` para filtrar el catálogo local.
+    async findPageByCategoryId(
+        categoryId: number,
+        page: number,
+        pageSize: number,
+    ): Promise<{ items: BookDetailResponseDto[]; totalItems: number }> {
+        this.logger.debug({ categoryId, page, pageSize, operation: 'findPageByCategoryId' }, 'Listing books by category');
+
+        const [books, totalItems] = await this.booksRepository
+            .createQueryBuilder('book')
+            .innerJoin(
+                BookCategory,
+                'bookCategory',
+                'bookCategory.bookId = book.bookId AND bookCategory.categoryId = :categoryId',
+                { categoryId },
+            )
+            .leftJoinAndSelect('book.provider', 'provider')
+            .orderBy('book.title', 'ASC')
+            .addOrderBy('book.bookId', 'ASC')
+            .skip((page - 1) * pageSize)
+            .take(pageSize)
+            .getManyAndCount();
+
+        return {
+            items: await this.toDetailDtos(books),
+            totalItems,
+        };
     }
 
     // Devuelve la copia local de una obra externa y solo la importa si
@@ -167,7 +200,7 @@ export class BooksService {
         const [authorsByBook, languagesByBook, categoriesByBook] = await Promise.all([
             this.loadAuthorsByBookIds([bookId]),
             this.loadLanguagesByBookIds([bookId]),
-             this.loadCategoriesByBookIds([bookId]),
+            this.loadCategoriesByBookIds([bookId]),
         ]);
 
         return this.toDetailDto(
@@ -494,6 +527,7 @@ export class BooksService {
             const languageRepository = manager.getRepository(Language);
             const categoryRepository = manager.getRepository(Category);
             const bookCategoryRepository = manager.getRepository(BookCategory);
+
             let book = await bookRepository.findOne({
                 where: {
                     providerId,
@@ -527,22 +561,31 @@ export class BooksService {
 
                 try {
                     await bookRepository.save(book);
+                    status = 'created';
                 } catch (error: unknown) {
                     if (!isMySqlUniqueViolation(error)) {
                         throw error;
                     }
 
                     // Dos importaciones concurrentes intentaron crear la misma
-                    // obra; se recupera la que ganó la carrera y se continúa.
-                    book = await bookRepository.findOneOrFail({
-                        where: {
-                            providerId,
+                    // obra y esta perdió la carrera. La relectura tiene que ser
+                    // con bloqueo: en REPEATABLE READ una lectura normal usa la
+                    // foto que la transacción tomó en su primera consulta, antes
+                    // de que la otra confirmara su fila, y no la encontraría.
+                    // Una lectura con bloqueo ve siempre la última versión
+                    // confirmada.
+                    book = await bookRepository
+                        .createQueryBuilder('book')
+                        .setLock('pessimistic_read')
+                        .where('book.providerId = :providerId', { providerId })
+                        .andWhere('book.externalReference = :externalReference', {
                             externalReference: externalBook.externalReference,
-                        },
-                    });
-                }
+                        })
+                        .getOneOrFail();
 
-                status = 'created';
+                    // La obra la creó la otra importación; esta solo la completa.
+                    status = 'updated';
+                }
             }
 
             await this.replaceAuthors(
@@ -558,13 +601,12 @@ export class BooksService {
                 externalBook.languageCodes,
             );
 
-             await this.replaceCategories(
+            await this.replaceCategories(
                 categoryRepository,
                 bookCategoryRepository,
                 book.bookId,
-                externalBook.categoryNames,
+                externalBook.categoryCodes,
             );
-
 
             return { bookId: book.bookId, status };
         });
@@ -696,8 +738,9 @@ export class BooksService {
         return languagesByBook;
     }
 
-    // Arma la respuesta de varias obras cargando autores e idiomas en dos
-    // consultas por lote, en vez de una por obra (evita el patrón N+1).
+    // Arma la respuesta de varias obras cargando autores, idiomas y categorías
+    // en una consulta por lote cada uno, en vez de una por obra (evita el
+    // patrón N+1).
     private async toDetailDtos(books: Book[]): Promise<BookDetailResponseDto[]> {
         if (books.length === 0) {
             return [];
@@ -705,7 +748,7 @@ export class BooksService {
 
         const bookIds = books.map((book) => book.bookId);
 
-                const [authorsByBook, languagesByBook, categoriesByBook] = await Promise.all([
+        const [authorsByBook, languagesByBook, categoriesByBook] = await Promise.all([
             this.loadAuthorsByBookIds(bookIds),
             this.loadLanguagesByBookIds(bookIds),
             this.loadCategoriesByBookIds(bookIds),
@@ -719,16 +762,15 @@ export class BooksService {
                 categoriesByBook.get(book.bookId) ?? [],
             ),
         );
-        
     }
 
-    // Traduce una fila de `books` (más sus autores e idiomas ya resueltos)
-    // al formato de respuesta público.
+    // Traduce una fila de `books` (más sus autores, idiomas y categorías ya
+    // resueltos) al formato de respuesta público.
     private toDetailDto(
         book: Book,
         authors: string[],
         languages: BookLanguageResponseDto[],
-        categories: string[],
+        categories: BookCategoryResponseDto[],
     ): BookDetailResponseDto {
         return {
             bookId: book.bookId,
@@ -740,92 +782,80 @@ export class BooksService {
             coverUrl: book.coverUrl,
             authors,
             languages,
-             categories,
-
+            categories,
             createdAt: book.createdAt,
             updatedAt: book.updatedAt,
         };
     }
 
-        // Trae, en una sola consulta, las categorías de varias obras a la vez.
+    // Trae, en una sola consulta, las categorías de varias obras a la vez,
+    // ordenadas por nombre.
     private async loadCategoriesByBookIds(
         bookIds: number[],
-    ): Promise<Map<number, string[]>> {
+    ): Promise<Map<number, BookCategoryResponseDto[]>> {
         const bookCategories = await this.bookCategoriesRepository.find({
             where: { bookId: In(bookIds) },
             relations: { category: true },
+            order: { category: { name: 'ASC' } },
         });
 
-        const categoriesByBook = new Map<number, string[]>();
+        const categoriesByBook = new Map<number, BookCategoryResponseDto[]>();
 
         for (const bookCategory of bookCategories) {
             const categoriesForBook = categoriesByBook.get(bookCategory.bookId) ?? [];
-            categoriesForBook.push(bookCategory.category.name);
+            categoriesForBook.push({
+                code: bookCategory.category.code,
+                name: bookCategory.category.name,
+            });
             categoriesByBook.set(bookCategory.bookId, categoriesForBook);
         }
 
         return categoriesByBook;
     }
 
-    // Reemplaza la lista completa de categorías de una obra, creando primero
-    // en `categories` los nombres que todavía no existan.
+    // Reemplaza las categorías de una obra por las de la taxonomía que
+    // indicó el proveedor. Nunca crea categorías: solo vincula las que ya
+    // existen en `categories`, así que dos importaciones simultáneas no
+    // compiten por crear la misma fila.
     private async replaceCategories(
         categoryRepository: Repository<Category>,
         bookCategoryRepository: Repository<BookCategory>,
         bookId: number,
-        categoryNames: readonly string[],
+        categoryCodes: readonly BookCategoryCode[],
     ): Promise<void> {
-        const categoryIds: number[] = [];
-
-        for (const name of categoryNames) {
-            categoryIds.push(
-                await this.ensureCategoryExists(categoryRepository, name),
-            );
-        }
-
         await bookCategoryRepository.delete({ bookId });
 
-        if (categoryIds.length === 0) {
+        if (categoryCodes.length === 0) {
             return;
         }
 
-        const rows = categoryIds.map((categoryId) =>
-            bookCategoryRepository.create({ bookId, categoryId }),
-        );
+        const categories = await categoryRepository.find({
+            where: { code: In([...categoryCodes]) },
+        });
 
-        await bookCategoryRepository.save(rows);
-    }
+        // Un código sin fila significa que el enum y la tabla no coinciden
+        // (por ejemplo, falta correr una migración). La obra se guarda igual,
+        // sin esa categoría, y queda registrado para corregirlo.
+        if (categories.length < new Set(categoryCodes).size) {
+            const storedCodes = new Set(categories.map((category) => category.code));
 
-    // Crea la categoría si todavía no existe y devuelve su identificador.
-    // Usa la misma detección de duplicados que el resto del proyecto para
-    // tolerar dos importaciones simultáneas.
-    private async ensureCategoryExists(
-        categoryRepository: Repository<Category>,
-        name: string,
-    ): Promise<number> {
-        const existente = await categoryRepository.findOne({ where: { name } });
-
-        if (existente) {
-            return existente.categoryId;
-        }
-
-        try {
-            const creada = await categoryRepository.save(
-                categoryRepository.create({ name }),
+            this.logger.warn(
+                {
+                    bookId,
+                    missingCategoryCodes: categoryCodes.filter((code) => !storedCodes.has(code)),
+                },
+                'Category codes not found in the categories table; run pending migrations',
             );
-
-            return creada.categoryId;
-        } catch (error: unknown) {
-            if (!isMySqlUniqueViolation(error)) {
-                throw error;
-            }
-
-            // Otra importación ganó la carrera; se recupera la que quedó.
-            const ganadora = await categoryRepository.findOneOrFail({
-                where: { name },
-            });
-
-            return ganadora.categoryId;
         }
+
+        if (categories.length === 0) {
+            return;
+        }
+
+        await bookCategoryRepository.save(
+            categories.map((category) =>
+                bookCategoryRepository.create({ bookId, categoryId: category.categoryId }),
+            ),
+        );
     }
 }

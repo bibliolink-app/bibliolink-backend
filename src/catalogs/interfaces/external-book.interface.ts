@@ -1,3 +1,4 @@
+import { BookCategoryCode } from '../enums/book-category-code.enum';
 import { BookContentFormat } from '../enums/book-content-format.enum';
 import { BookProviderCode } from '../enums/book-provider-code.enum';
 
@@ -32,9 +33,10 @@ export interface ExternalBook {
     // Códigos de idioma normalizados (por ejemplo `en`, `es`).
     languageCodes: string[];
 
-    // Categorías tal como las publica el proveedor, ya normalizadas.
-    // Queda vacío cuando el proveedor no las ofrece.
-    categoryNames: string[];
+    // Categorías de la taxonomía de BiblioLink, traducidas desde la
+    // clasificación del proveedor y ordenadas de la más a la menos
+    // descriptiva. Queda vacío si nada de lo que publica tiene traducción.
+    categoryCodes: BookCategoryCode[];
 }
 
 // Página de resultados de un proveedor.

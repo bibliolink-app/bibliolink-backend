@@ -4,6 +4,7 @@ import { BOOK_EXTERNAL_REFERENCE_MAX_LENGTH, BOOK_TITLE_MAX_LENGTH, } from '../c
 import { BookContentFormat } from '../enums/book-content-format.enum';
 import { BookProviderCode } from '../enums/book-provider-code.enum';
 import { CatalogHttpService } from '../http/catalog-http.service';
+import { mapGutendexCategories } from '../mappings/gutendex-categories.mapping';
 import type { BookCatalogProvider } from '../interfaces/book-catalog-provider.interface';
 import type { CatalogSearchCriteria, ExternalBook, ExternalBookPage, } from '../interfaces/external-book.interface';
 import { NO_BOOK_CONTENT, toBookContent, type BookContent, } from '../utils/book-content.util';
@@ -43,6 +44,9 @@ interface GutendexBook {
     authors?: GutendexPerson[];
     summaries?: string[];
     languages?: string[];
+    // Temas de la obra y colecciones editoriales en las que Gutendex la agrupa.
+    subjects?: string[];
+    bookshelves?: string[];
     formats?: Record<string, string>;
 }
 
@@ -149,6 +153,13 @@ export class GutendexProvider implements BookCatalogProvider {
                 (book.authors ?? []).map((author) => author.name),
             ),
             languageCodes: normalizeLanguageCodes(book.languages),
+            // Gutendex separa los temas (`subjects`) de las colecciones
+            // (`bookshelves`); las curadas se traducen directamente y los
+            // temas solo se usan si no hay ninguna curada.
+            categoryCodes: mapGutendexCategories(
+                book.subjects ?? [],
+                book.bookshelves ?? [],
+            ),
         };
     }
 

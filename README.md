@@ -350,7 +350,7 @@ actualiza enlace y formato juntos.
 
 ### Cómo se guarda una obra
 
-Cada importación es una única transacción sobre tres tablas:
+Cada importación es una única transacción sobre cuatro tablas:
 
 1. **`books`** — se busca por `(provider_id, external_reference)`; si existe
    se actualiza (`título`, `descripción`, `portada`, `contenido`), si no,
@@ -363,10 +363,17 @@ Cada importación es una única transacción sobre tres tablas:
    fija en [language-names.ts](src/books/data/language-names.ts); un código
    sin nombre conocido no rompe la importación, se guarda como
    `Unknown (xx)`), y luego se reemplaza la lista de idiomas de la obra.
+4. **`book_categories`** — se reemplazan las categorías de la obra por las de
+   la taxonomía que indicó el proveedor. Nunca se crean categorías: solo se
+   vinculan las que ya existen (ver [Categorías](#categorías-módulo-categories)).
 
-Una carrera entre dos importaciones simultáneas de la misma obra no falla: se
-detecta el `ER_DUP_ENTRY` y se recupera la fila que ganó, igual que en el
-resto del proyecto (`isMySqlUniqueViolation`).
+Una carrera entre dos importaciones simultáneas de la misma obra no falla: la
+que pierde recibe `ER_DUP_ENTRY` y relee la fila que ganó **con una lectura
+con bloqueo** (`FOR SHARE`). Tiene que ser así porque MySQL trabaja en
+REPEATABLE READ: una lectura normal usaría la foto que la transacción tomó en
+su primera consulta, antes de que la otra confirmara, y no encontraría la
+fila. La obra queda creada una sola vez y la importación que perdió responde
+`updated`.
 
 ### Endpoints
 
@@ -406,6 +413,12 @@ curl -X POST http://localhost:3000/books/import \
   "coverUrl": "https://www.gutenberg.org/cache/epub/345/pg345.cover.medium.jpg",
   "authors": ["Bram Stoker"],
   "languages": [{ "languageCode": "en", "name": "English" }],
+  "categories": [
+    { "code": "science-fiction-fantasy", "name": "Ciencia ficción y fantasía" },
+    { "code": "classics", "name": "Clásicos de la literatura" },
+    { "code": "fiction", "name": "Ficción" },
+    { "code": "mystery-thriller", "name": "Misterio y suspenso" }
+  ],
   "createdAt": "2026-09-27T18:08:35.083Z",
   "updatedAt": "2026-09-27T18:08:35.083Z"
 }
@@ -537,6 +550,107 @@ que el resto de `catalogs` y `books`. Antes de exponerlos en producción,
 administrativo, ya que puede disparar varias llamadas a APIs externas por
 cada ejecución.
 
+## Categorías (módulo `categories`)
+
+BiblioLink usa una **taxonomía propia y fija** de 28 categorías. Las crea la
+migración `ReplaceCategoriesWithTaxonomy` y el código las conoce por el enum
+[`BookCategoryCode`](src/catalogs/enums/book-category-code.enum.ts). La
+importación nunca inventa categorías: cada proveedor traduce su propia
+clasificación a estos códigos.
+
+| Literatura | No ficción y académico |
+| --- | --- |
+| `fiction` Ficción | `biography` Biografías y memorias |
+| `classics` Clásicos de la literatura | `history` Historia |
+| `science-fiction-fantasy` Ciencia ficción y fantasía | `philosophy-religion` Filosofía y religión |
+| `mystery-thriller` Misterio y suspenso | `social-sciences` Ciencias sociales y política |
+| `horror` Terror | `economics-business` Economía y negocios |
+| `romance` Romance | `natural-sciences` Ciencias naturales |
+| `adventure` Aventura | `mathematics` Matemáticas y estadística |
+| `historical-fiction` Novela histórica | `technology` Tecnología e informática |
+| `short-stories` Cuentos y relatos | `health` Medicina y salud |
+| `poetry` Poesía | `arts` Arte y música |
+| `drama` Teatro | `language-education` Lengua, educación y referencia |
+| `humor` Humor y sátira | `travel` Viajes |
+| `mythology-folklore` Mitología y folclore | `lifestyle` Hogar, naturaleza y pasatiempos |
+| `children-young-adult` Infantil y juvenil | |
+| `essays` Ensayos, cartas y discursos | |
+
+### De dónde sale cada categoría
+
+Las tablas de traducción están en [src/catalogs/mappings/](src/catalogs/mappings/):
+
+| Proveedor | Qué se traduce |
+| --- | --- |
+| Gutendex | Las [colecciones curadas](https://www.gutenberg.org/ebooks/categories) de Project Gutenberg (`Category: Novels`, `Category: Romance`, `Category: History - …`). Si una obra no tiene ninguna (alrededor de una de cada diez, como *Treasure Island*), se aplican reglas sobre sus temas LCSH: `Sea stories` → Aventura, `… -- Fiction` → Ficción. Un tema de ficción nunca cae en una categoría de no ficción (`France -- History -- Fiction` es Novela histórica, no Historia). |
+| Standard Ebooks | Su vocabulario propio de 19 temas (`Horror`, `Science Fiction`, `Shorts`…). Se ignoran los LCSH que vienen junto a él. |
+| arXiv | El archivo de cada categoría: la principal primero y luego las secundarias (`cs.*` → Tecnología, `stat.*` → Matemáticas, `q-fin.*` → Economía). |
+| OpenAlex | El campo del tema principal, uno de 26 (`Computer Science` → Tecnología). `Arts and Humanities` se traduce por subcampo (`Philosophy` → Filosofía y religión). |
+
+Lo que no tiene traducción se descarta; si nada se traduce, la obra queda sin
+categoría. Cada obra tiene como máximo 10 categorías.
+
+Para **agregar una categoría**: sumar el valor al enum, crear una migración que
+inserte la fila con el mismo `code` y agregarla a las tablas de traducción.
+Si el enum y la tabla no coinciden, la importación guarda la obra sin esa
+categoría y lo registra como advertencia.
+
+La migración borra las categorías anteriores (los descriptores libres de cada
+proveedor). Las obras ya guardadas se recategorizan al volver a importarlas.
+
+### Endpoints
+
+- `GET /categories` — la taxonomía completa con la cantidad de obras de cada
+  categoría, de la más usada a la menos usada. Incluye las que aún no tienen obras.
+- `GET /categories/:code/books?page=&pageSize=` — obras guardadas de una
+  categoría, ordenadas por título. `page` empieza en 1; `pageSize` va de 1 a
+  50 (20 por omisión). Un `code` que no es de la taxonomía responde `400`.
+
+Las respuestas de `books` y `favorites` traen las categorías de cada obra como
+`{ code, name }`, ordenadas por nombre; el `code` sirve para enlazar al filtro.
+
+#### Ejemplos de uso
+
+```bash
+curl http://localhost:3000/categories
+```
+
+```json
+[
+  { "categoryId": 1, "code": "fiction", "name": "Ficción", "bookCount": 30 },
+  { "categoryId": 2, "code": "classics", "name": "Clásicos de la literatura", "bookCount": 22 },
+  { "categoryId": 10, "code": "poetry", "name": "Poesía", "bookCount": 14 }
+]
+```
+
+```bash
+curl "http://localhost:3000/categories/fiction/books?page=1&pageSize=5"
+```
+
+```json
+{
+  "category": { "code": "fiction", "name": "Ficción" },
+  "page": 1,
+  "pageSize": 5,
+  "totalItems": 30,
+  "hasNextPage": true,
+  "items": [
+    {
+      "bookId": 58,
+      "title": "A Room with a View",
+      "categories": [
+        { "code": "fiction", "name": "Ficción" },
+        { "code": "romance", "name": "Romance" }
+      ]
+    }
+  ]
+}
+```
+
+En los ejemplos las listas van recortadas y cada obra trae solo algunos
+campos; la respuesta real devuelve las 28 categorías y las obras completas,
+igual que `GET /books/:id`.
+
 ## Favoritos (módulo `favorites`)
 
 Cada usuario guarda obras de `books` en sus favoritos, con un límite que
@@ -611,6 +725,11 @@ curl -X POST http://localhost:3000/favorites/external \
     "coverUrl": "https://www.gutenberg.org/cache/epub/1342/pg1342.cover.medium.jpg",
     "authors": ["Jane Austen"],
     "languages": [{ "languageCode": "en", "name": "English" }],
+    "categories": [
+      { "code": "classics", "name": "Clásicos de la literatura" },
+      { "code": "fiction", "name": "Ficción" },
+      { "code": "romance", "name": "Romance" }
+    ],
     "createdAt": "2026-10-01T15:17:41.902Z",
     "updatedAt": "2026-10-01T15:17:41.902Z"
   }

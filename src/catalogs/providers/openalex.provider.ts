@@ -8,6 +8,7 @@ import { CatalogHttpService } from '../http/catalog-http.service';
 import type { BookCatalogProvider } from '../interfaces/book-catalog-provider.interface';
 import type { CatalogSearchCriteria, ExternalBook, ExternalBookPage, } from '../interfaces/external-book.interface';
 import { NO_BOOK_CONTENT, toBookContent, type BookContent, } from '../utils/book-content.util';
+import { mapOpenAlexCategories, type OpenAlexPrimaryTopic, } from '../mappings/openalex-categories.mapping';
 import { normalizeAuthorNames, normalizeLanguageCodes, toNullableText, truncate, } from '../utils/catalog-text.util';
 
 // OpenAlex indexa artículos, libros y otros trabajos académicos.
@@ -46,6 +47,8 @@ interface OpenAlexWork {
     };
     primary_location?: OpenAlexLocation | null;
     best_oa_location?: OpenAlexLocation | null;
+    // Tema principal del trabajo, con su campo y subcampo.
+    primary_topic?: OpenAlexPrimaryTopic | null;
 }
 
 interface OpenAlexResponse {
@@ -166,6 +169,7 @@ export class OpenAlexProvider implements BookCatalogProvider {
                 ),
             ),
             languageCodes: normalizeLanguageCodes(work.language),
+            categoryCodes: mapOpenAlexCategories(work.primary_topic),
         };
     }
 

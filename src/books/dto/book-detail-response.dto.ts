@@ -1,4 +1,5 @@
 import { BookProviderCode } from '../../catalogs/enums/book-provider-code.enum';
+import { BookCategoryResponseDto } from './book-category-response.dto';
 import { BookLanguageResponseDto } from './book-language-response.dto';
 
 // Representación completa de una obra guardada en `books`, con sus autores
@@ -23,6 +24,9 @@ export class BookDetailResponseDto {
     authors!: string[];
 
     languages!: BookLanguageResponseDto[];
+
+    // Categorías de la obra en la taxonomía de BiblioLink, ordenadas por nombre.
+    categories!: BookCategoryResponseDto[];
 
     createdAt!: Date;
 

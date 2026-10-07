@@ -25,3 +25,7 @@ export const BOOK_LANGUAGE_CODE_MAX_LENGTH = 10;
 
 // `book_authors` ordena a los autores en una columna `tinyint` sin signo.
 export const BOOK_MAX_AUTHORS = 255;
+
+// Tope de categorías por obra. Cada proveedor entrega las categorías de la
+// más a la menos descriptiva y solo se conservan las primeras.
+export const BOOK_MAX_CATEGORIES = 10;

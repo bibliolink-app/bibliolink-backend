@@ -1,21 +1,62 @@
 import { Module } from '@nestjs/common';
-import { createObserveModule } from '@nestjs/observe';
-import { AppController } from './app.controller.js';
-import { AppService } from './app.service.js';
+import { APP_GUARD } from '@nestjs/core';
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
+import { TypeOrmModule } from '@nestjs/typeorm';
+import { LoggerModule } from 'nestjs-pino';
 
-export const { ObserveModule, ObserveInstrument } = createObserveModule();
+import { envs } from './config/envs';
+import { throttlingConfig } from './config/throttling.config';
+import { loggingConfig } from './config/logging.config';
+import { EmailModule } from './email/email.module';
+import { CatalogsModule } from './catalogs/catalogs.module';
+import { BooksModule } from './books/books.module';
+import { FavoritesModule } from './favorites/favorites.module';
+import { SubscriptionsModule } from './subscriptions/subscriptions.module';
+import { AuthModule } from './auth/auth.module';
+import { PaymentTransactionsModule } from './payment_transactions/payment_transactions.module';
+import { AdsModule } from './ads/ads.module';
+import { ReadingModule } from './reading/reading.module';
+import { SeedModule } from './seed/seed.module';
+import { AnalyticsModule } from './analytics/analytics.module';
+import { CategoriesModule } from './categories/categories.module';
 
 @Module({
-  imports: [
-    // Distributed tracing, auto-correlated logs, request/job metrics, error
-    // telemetry, alarms, and more — out of the box. Sign up at https://observe.nestjs.com
-    ObserveModule.forRoot({
-      appKey: 'YOUR_APP_KEY',
-      appSecret: 'YOUR_APP_SECRET',
-      serviceId: 'bibliolink-backend',
-    }),
-  ],
-  controllers: [AppController],
-  providers: [AppService],
+    imports: [
+        LoggerModule.forRoot(loggingConfig),
+        TypeOrmModule.forRoot({
+            type: envs.database.type,
+            host: envs.database.host,
+            port: envs.database.port,
+            username: envs.database.user,
+            password: envs.database.password,
+            database: envs.database.name,
+            synchronize: false,
+            autoLoadEntities: true,
+            timezone: 'Z',
+            dateStrings: false,
+        }),
+
+        ThrottlerModule.forRoot(throttlingConfig),
+        AuthModule,
+        EmailModule,
+        CatalogsModule,
+        BooksModule,
+        FavoritesModule,
+        SubscriptionsModule,
+        PaymentTransactionsModule,
+        SeedModule,
+        AdsModule,
+        ReadingModule,
+        AnalyticsModule,
+        CategoriesModule,
+    ],
+
+    providers: [
+        {
+            provide: APP_GUARD,
+            useClass: ThrottlerGuard,
+        },
+    ],
 })
-export class AppModule {}
+
+export class AppModule { }

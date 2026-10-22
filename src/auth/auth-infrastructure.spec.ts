@@ -30,6 +30,11 @@ import { RefreshJwtStrategy } from './strategies/refresh-jwt.strategy';
 
 const testEnvs = vi.hoisted(() => ({
     isProduction: false,
+    cookies: {
+        authMaxAge: 900000,
+        refreshMaxAge: 604800000,
+        sameSite: 'lax' as 'lax' | 'strict' | 'none',
+    },
     jwt: {
         access: {
             secret: 'test-access-secret-at-least-32-characters',
@@ -265,6 +270,27 @@ describe('AuthCookieService', () => {
             testEnvs.isProduction = false;
         },
     );
+
+    it('uses SameSite=None with Secure when the frontend is on another site', () => {
+        testEnvs.cookies.sameSite = 'none';
+        try {
+            const response = { cookie: vi.fn<Response['cookie']>() };
+            new AuthCookieService().setAccessToken(response, 'test-access');
+            expect(response.cookie).toHaveBeenCalledWith(
+                'access_token',
+                'test-access',
+                {
+                    httpOnly: true,
+                    secure: true,
+                    sameSite: 'none',
+                    path: '/',
+                    maxAge: 900000,
+                },
+            );
+        } finally {
+            testEnvs.cookies.sameSite = 'lax';
+        }
+    });
 
     it('clears cookies using their original paths and flags without maxAge', () => {
         const response = { clearCookie: vi.fn<Response['clearCookie']>() };

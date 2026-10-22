@@ -70,6 +70,25 @@ Una fecha de nacimiento futura deberá evaluarse como regla de validez del
 registro cuando se implemente ese caso de uso. No hay una edad mínima o máxima
 definida en esta etapa.
 
+## Despliegue
+
+- `GET /` y `GET /health` responden `{ "status": "ok", … }` sin consultar la
+  base ni servicios externos (y sin throttling). Si no responden, la app no
+  arrancó: revisar variables de entorno y la conexión a MySQL.
+- Diagnóstico completo y correcciones para Vercel:
+  [docs/pruebas-integracion-despliegue.md](docs/pruebas-integracion-despliegue.md)
+  y [docs/correcciones-despliegue.md](docs/correcciones-despliegue.md).
+
+Variables opcionales relevantes para el despliegue:
+
+| Variable | Por omisión | Uso |
+| --- | --- | --- |
+| `DATABASE_SSL` | `false` | `true` si el MySQL exige TLS |
+| `DATABASE_POOL_SIZE` | `10` | Conexiones por instancia; en Vercel conviene 3–5 |
+| `DATABASE_CONNECT_RETRIES` | `2` | Reintentos de conexión al arrancar |
+| `AUTH_COOKIE_SAME_SITE` | `lax` | `none` si el frontend está en otro sitio (agrega `Secure`) |
+| `TRUST_PROXY_HOPS` | `1` en Vercel, `0` fuera | Proxies de los que se acepta `X-Forwarded-For` |
+
 ## Migraciones
 
 El esquema base se creó fuera del repositorio; a partir de
@@ -377,6 +396,14 @@ fila. La obra queda creada una sola vez y la importación que perdió responde
 
 ### Endpoints
 
+Las cuatro rutas de importación exigen sesión con rol `ADMIN` (401 sin
+sesión, 403 con `USER`): escriben en la base y una carga masiva puede ocupar
+la función hasta su tiempo máximo. Un usuario agrega obras con
+`POST /favorites/external`, que importa una sola obra si hace falta. La
+consulta (`GET /books`, `GET /books/:id`) es pública. En los ejemplos de
+abajo hay que enviar la cookie de sesión de un administrador
+(`-b "access_token=<token>"`).
+
 - `POST /books/import` — trae una obra puntual de un proveedor (mismos datos
   que devuelve `catalogs`) y la guarda. Body: `{ providerCode, externalReference }`.
 - `POST /books/import/search` — ejecuta una búsqueda en `catalogs` (mismo
@@ -398,6 +425,7 @@ fila. La obra queda creada una sola vez y la importación que perdió responde
 
 ```bash
 curl -X POST http://localhost:3000/books/import \
+  -b "access_token=<token-de-admin>" \
   -H "Content-Type: application/json" \
   -d '{"providerCode":"gutendex","externalReference":"345"}'
 ```
@@ -431,6 +459,7 @@ los metadatos actualizados.
 
 ```bash
 curl -X POST http://localhost:3000/books/import/search \
+  -b "access_token=<token-de-admin>" \
   -H "Content-Type: application/json" \
   -d '{"query":"dracula","pageSize":2}'
 ```
@@ -465,6 +494,7 @@ API no ofrece un endpoint de listado completo (solo búsqueda).
 
 ```bash
 curl -X POST http://localhost:3000/books/import/providers/standard-ebooks \
+  -b "access_token=<token-de-admin>" \
   -H "Content-Type: application/json" \
   -d '{"query":"shelley","pageSize":3,"maxPages":4}'
 ```
@@ -501,6 +531,7 @@ administrador lo apagó.
 
 ```bash
 curl -X POST http://localhost:3000/books/import/all \
+  -b "access_token=<token-de-admin>" \
   -H "Content-Type: application/json" \
   -d '{"query":"poe","pageSize":3,"maxPages":2}'
 ```
@@ -541,14 +572,10 @@ curl http://localhost:3000/books/1
 | Código | Cuándo ocurre |
 | --- | --- |
 | `400` | Body inválido: `providerCode` desconocido, referencia vacía, `maxPages`/`pageSize` fuera de rango, u otro parámetro fuera de rango. |
+| `401` | Importación sin sesión. |
+| `403` | Importación con un usuario que no es `ADMIN`. |
 | `404` | `GET /books/:id` con un id que no existe, o una importación (puntual o masiva de un proveedor) contra un proveedor desactivado o una referencia que no existe. |
 | `503` | El proveedor externo no respondió a tiempo durante una importación puntual. |
-
-Nota: por ahora estos endpoints no tienen guardias de autenticación, igual
-que el resto de `catalogs` y `books`. Antes de exponerlos en producción,
-`POST /books/import/search` en particular conviene restringirlo a un rol
-administrativo, ya que puede disparar varias llamadas a APIs externas por
-cada ejecución.
 
 ## Categorías (módulo `categories`)
 

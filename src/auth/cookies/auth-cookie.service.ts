@@ -30,10 +30,13 @@ export class AuthCookieService {
     }
 
     private options(kind: keyof typeof cookies): CookieOptions {
+        const sameSite = envs.cookies.sameSite;
+
         return {
             httpOnly: true,
-            secure: envs.isProduction,
-            sameSite: 'lax',
+            // Los navegadores descartan las cookies `SameSite=None` sin `Secure`.
+            secure: envs.isProduction || sameSite === 'none',
+            sameSite,
             path: cookies[kind].path,
         };
     }

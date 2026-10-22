@@ -18,9 +18,7 @@ import { BookCategoryResponseDto } from './dto/book-category-response.dto';
 import { BookDetailResponseDto } from './dto/book-detail-response.dto';
 import { BookLanguageResponseDto } from './dto/book-language-response.dto';
 import { BulkImportBooksDto } from './dto/bulk-import-books.dto';
-import { CreateBookDto } from './dto/create-book.dto';
 import { ImportBookDto } from './dto/import-book.dto';
-import { UpdateBookDto } from './dto/update-book.dto';
 import { BookAuthor } from './entities/book-author.entity';
 import { BookLanguage } from './entities/book-language.entity';
 import { Book } from './entities/book.entity';
@@ -56,21 +54,6 @@ export class BooksService {
         // la puerta de entrada a las obras externas que aquí se persisten.
         private readonly catalogsService: CatalogsService,
     ) { }
-
-    create(createBookDto: CreateBookDto) {
-        this.logger.debug({ operation: 'create' }, 'Book scaffold method completed without persistence');
-        return 'This action adds a new book';
-    }
-
-    update(id: number, updateBookDto: UpdateBookDto) {
-        this.logger.debug({ bookId: id, operation: 'update' }, 'Book scaffold method completed without persistence');
-        return `This action updates a #${id} book`;
-    }
-
-    remove(id: number) {
-        this.logger.debug({ bookId: id, operation: 'remove' }, 'Book scaffold method completed without persistence');
-        return `This action removes a #${id} book`;
-    }
 
     // Lista las obras ya guardadas localmente, con sus autores e idiomas.
     async findAll(): Promise<BookDetailResponseDto[]> {

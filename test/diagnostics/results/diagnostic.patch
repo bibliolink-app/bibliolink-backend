@@ -1,0 +1,962 @@
+diff --git "a/test/diagnostics\\vitest.config.mts" "b/test/diagnostics\\vitest.config.mts"
+new file mode 100644
+index 0000000..e388e5c
+--- /dev/null
++++ "b/test/diagnostics\\vitest.config.mts"
+@@ -0,0 +1,13 @@
++import { defineConfig } from 'vitest/config';
++import existing from '../../vitest.config';
++
++export default defineConfig({
++  ...existing,
++  test: {
++    ...existing.test,
++    include: ['test/diagnostics/metadata.probe.ts'],
++    setupFiles: ['test/diagnostics/environment.cjs'],
++    testTimeout: 15000,
++    hookTimeout: 15000,
++  },
++});
+diff --git "a/test/diagnostics\\vercel-runtime.cjs" "b/test/diagnostics\\vercel-runtime.cjs"
+new file mode 100644
+index 0000000..1a48fe8
+--- /dev/null
++++ "b/test/diagnostics\\vercel-runtime.cjs"
+@@ -0,0 +1,54 @@
++require('./environment.cjs');
++const assert = require('node:assert/strict');
++const { createRequire } = require('node:module');
++const { resolve, relative } = require('node:path');
++const { get } = require('node:http');
++const root = resolve(__dirname, '../..');
++const cached = createRequire(resolve(process.argv[2]));
++const builder = cached('@vercel/nestjs');
++const nodeBuilder = cached('@vercel/node');
++
++function request(port) {
++  return new Promise((accept, reject) => {
++    const req = get(`http://127.0.0.1:${port}/categories`, (response) => {
++      let text = '';
++      response.setEncoding('utf8');
++      response.on('data', (chunk) => { text += chunk; });
++      response.on('end', () => {
++        try { accept({ status: response.statusCode, body: JSON.parse(text) }); }
++        catch (error) { reject(error); }
++      });
++    });
++    req.setTimeout(10000, () => req.destroy(new Error('Diagnostic HTTP timeout')));
++    req.on('error', reject);
++  });
++}
++
++async function run() {
++  const base = { workPath: root, files: {}, entrypoint: 'package.json', config: {}, meta: { isDev: true } };
++  assert.equal(await builder.entrypointCallback(base), 'src/main.ts');
++  const compiled = await builder.entrypointCallback({ ...base, config: { projectSettings: { outputDirectory: 'dist' } } });
++  assert.equal(compiled.replaceAll('\\', '/'), 'dist/main.js');
++  console.log('[entrypoint] default=src/main.ts; outputDirectory=dist => dist/main.js');
++  // Propagate only the diagnostic preloader to the runtime child; this process was sanitized by run.cjs.
++  process.env.NODE_OPTIONS = `--require "${resolve(__dirname, 'environment.cjs').replaceAll('\\', '/')}"`;
++  for (const [file, expected] of [['source-entry.ts', 503], ['compiled-entry.cjs', 200]]) {
++    const server = await nodeBuilder.startDevServer({ ...base,
++      entrypoint: relative(root, resolve(__dirname, 'fixtures', file)),
++    });
++    try {
++      const result = await request(server.port);
++      console.log('[official @vercel/node dev adapter]', file, JSON.stringify(result));
++      assert.equal(result.status, expected);
++      if (expected === 503) {
++        assert.equal(result.body.metadata, null);
++        assert.equal(result.body.error, 'UndefinedDependencyException');
++        assert.equal(result.body.indexOne, true);
++      } else {
++        assert.equal(result.body.resolved, true);
++        assert.equal(result.body.metadata[1], 'JwtService');
++      }
++    } finally { await server.shutdown(); }
++  }
++}
++run().catch((error) => { console.error(error); process.exitCode = 1; });
+diff --git "a/test/diagnostics\\source-probe.cjs" "b/test/diagnostics\\source-probe.cjs"
+new file mode 100644
+index 0000000..91f3062
+--- /dev/null
++++ "b/test/diagnostics\\source-probe.cjs"
+@@ -0,0 +1,29 @@
++require('./environment.cjs');
++require('reflect-metadata');
++const assert = require('node:assert/strict');
++const { Test } = require('@nestjs/testing');
++const { JwtModule } = require('@nestjs/jwt');
++const { getRepositoryToken } = require('@nestjs/typeorm');
++const { getLoggerToken } = require('nestjs-pino');
++const { AuthService } = require('../../src/auth/auth.service.ts');
++const { PasswordResetToken } = require('../../src/auth/entities/password-reset-token.entity.ts');
++
++async function probe() {
++  const metadata = Reflect.getMetadata('design:paramtypes', AuthService);
++  console.log('[DI-METADATA tsx]', metadata ?? 'METADATA_NOT_FOUND');
++  assert.equal(metadata, undefined);
++  assert.deepEqual(Reflect.getMetadata('self:paramtypes', AuthService).map(({ index }) => index).sort(), [0, 6]);
++  await assert.rejects(Test.createTestingModule({
++    imports: [JwtModule.register({})],
++    providers: [AuthService,
++      { provide: getLoggerToken('AuthService'), useValue: {} },
++      { provide: getRepositoryToken(PasswordResetToken), useValue: {} },
++    ],
++  }).compile(), (error) => {
++    assert.equal(error.constructor.name, 'UndefinedDependencyException');
++    assert.match(error.message, /index \[1\]/);
++    console.log('[DI tsx] UndefinedDependencyException AuthService index [1]');
++    return true;
++  });
++}
++probe().catch((error) => { console.error(error); process.exitCode = 1; });
+diff --git "a/test/diagnostics\\runtime-fixture.cjs" "b/test/diagnostics\\runtime-fixture.cjs"
+new file mode 100644
+index 0000000..d456a7f
+--- /dev/null
++++ "b/test/diagnostics\\runtime-fixture.cjs"
+@@ -0,0 +1,30 @@
++const { createServer } = require('node:http');
++const { Test } = require('@nestjs/testing');
++const { JwtModule } = require('@nestjs/jwt');
++const { getLoggerToken } = require('nestjs-pino');
++const { getRepositoryToken } = require('@nestjs/typeorm');
++
++exports.serve = (AuthService, PasswordResetToken, dependencies) => {
++  const metadata = Reflect.getMetadata('design:paramtypes', AuthService);
++  // Start the fixture server immediately; only its diagnostic request initializes Nest.
++  // This isolates transformation from asynchronous server detection.
++  createServer(async (_request, response) => {
++    let module;
++    try {
++      module = await Test.createTestingModule({
++        imports: [JwtModule.register({})],
++        providers: [AuthService,
++          { provide: getLoggerToken(AuthService.name), useValue: {} },
++          { provide: getRepositoryToken(PasswordResetToken), useValue: {} },
++          ...dependencies.map((provide) => ({ provide, useValue: {} })),
++        ],
++      }).compile();
++      response.writeHead(200, { 'content-type': 'application/json' });
++      response.end(JSON.stringify({ metadata: metadata.map((item) => item.name), resolved: true }));
++    } catch (error) {
++      response.writeHead(503, { 'content-type': 'application/json' });
++      response.end(JSON.stringify({ metadata: metadata ?? null, error: error.constructor.name,
++        indexOne: /index \[1\]/.test(error.message) }));
++    } finally { await module?.close(); }
++  }).listen(0);
++};
+diff --git "a/test/diagnostics\\run.cjs" "b/test/diagnostics\\run.cjs"
+new file mode 100644
+index 0000000..dbdae20
+--- /dev/null
++++ "b/test/diagnostics\\run.cjs"
+@@ -0,0 +1,37 @@
++const { spawnSync } = require('node:child_process');
++const { resolve, dirname } = require('node:path');
++const { createRequire } = require('node:module');
++const { pathToFileURL } = require('node:url');
++const { mkdirSync, writeFileSync } = require('node:fs');
++const { stripVTControlCharacters } = require('node:util');
++const root = resolve(__dirname, '../..');
++const mode = process.argv[2] ?? 'compiled';
++const preload = resolve(__dirname, 'environment.cjs');
++const vitest = resolve(dirname(require.resolve('vitest/package.json')), 'vitest.mjs');
++let args;
++if (mode === 'compiled') args = ['--test', '--test-timeout=60000', resolve(__dirname, 'compiled.test.cjs')];
++else if (mode === 'vitest') args = ['--require', preload, vitest, 'run', '--config', 'test/diagnostics/vitest.config.mts'];
++else if (mode === 'regression') args = ['--require', preload, vitest, 'run', '--config', 'vitest.config.ts'];
++else if (mode === 'e2e') args = ['--require', preload, vitest, 'run', '--config', 'vitest.config.e2e.ts', '--hookTimeout', '35000'];
++else if (mode === 'tsx') {
++  if (!process.argv[3]) throw new Error('Pass the absolute path to the cached @vercel/node/package.json');
++  const cached = createRequire(resolve(process.argv[3]));
++  console.log('Cached @vercel/node:', cached('./package.json').version);
++  args = ['--require', preload, '--import', pathToFileURL(cached.resolve('tsx')).href, resolve(__dirname, 'source-probe.cjs')];
++} else if (mode === 'vercel' || mode === 'compiler') {
++  if (!process.argv[3]) throw new Error('Pass the absolute path to the cached @vercel/node/package.json');
++  args = [resolve(__dirname, mode === 'vercel' ? 'vercel-runtime.cjs' : 'compiler-probe.cjs'), resolve(process.argv[3])];
++} else throw new Error(`Unknown diagnostic mode: ${mode}`);
++// Do not inherit deployment credentials or loader flags. Preserve OS execution paths only.
++const env = Object.fromEntries(Object.entries(process.env).filter(([key]) =>
++  /^(PATH|PATHEXT|SYSTEMROOT|WINDIR|TEMP|TMP|COMSPEC|USERPROFILE|HOME|LOCALAPPDATA|APPDATA)$/i.test(key)));
++const result = spawnSync(process.execPath, args, { cwd: root, env, timeout: 90000, encoding: 'utf8', maxBuffer: 8 * 1024 * 1024 });
++process.stdout.write(result.stdout ?? '');
++process.stderr.write(result.stderr ?? '');
++if (result.error) console.error(result.error.message);
++const results = resolve(__dirname, 'results');
++mkdirSync(results, { recursive: true });
++writeFileSync(resolve(results, `${mode}.log`), stripVTControlCharacters(
++  `Node ${process.version}; mode=${mode}; exit=${result.status}; error=${result.error?.message ?? 'none'}\n`
++  + (result.stdout ?? '') + (result.stderr ?? '')));
++process.exitCode = result.status ?? 1;
+diff --git "a/test/diagnostics\\README.md" "b/test/diagnostics\\README.md"
+new file mode 100644
+index 0000000..5f0a997
+--- /dev/null
++++ "b/test/diagnostics\\README.md"
+@@ -0,0 +1,382 @@
++# Diagnóstico BiblioLink / Vercel
++
++Fecha: 2026-10-20, America/Costa_Rica. Estado: diagnóstico local terminado;
++incidente de Production **no resuelto ni reproducido en su runtime alojado**.
++
++## Estado recuperado y alcance
++
++- Rama: `diagnostic/vercel-nest-integration`, creada desde `feature-jhonn`.
++- Commit base: `766bc41333730d7e1b758771ae12a5b3aa4d82c9`.
++- El árbol estaba limpio al comenzar. Todos los cambios están en `test/diagnostics/`
++  y siguen sin commit. `git diff` normal no muestra archivos nuevos sin seguimiento.
++- No se modificaron `src`, configuraciones productivas, package.json ni pnpm-lock.yaml.
++- No hubo push, despliegue, acceso a recursos privados de Vercel, migraciones,
++  seeds ni escrituras sobre Aiven. No se inició `dist/main.js` con el `.env` local.
++- Se recuperaron once archivos de diagnóstico y tres logs: `compiled.log`,
++  `vercel.log`, `e2e.log`. Los resultados anteriores de Vitest, regresión, build y
++  lint estaban en la conversación; no tenían log persistido. No se reconstruyen
++  como si fueran logs originales. La continuación añade `compiler-probe.cjs` y este informe.
++
++## Resultado y grado de certeza
++
++| Hallazgo | Clasificación | Evidencia / límite |
++|---|---|---|
++| `nest build` emite los siete tipos de AuthService | Confirmado | `compiled.test.cjs`, `dist/auth/auth.service.js:231` |
++| JwtService se importa como valor y JwtModule se registra | Confirmado | `src/auth/auth.service.ts:7`, `src/auth/auth.module.ts:29` |
++| AuthModule y AppModule resuelven sus providers | Confirmado con persistencia simulada | No prueba conectividad ni consultas SQL |
++| `/categories` es público | Confirmado | HTTP 200 sin cookies con CategoriesModule y AppModule; fallo ajeno de DI impide arrancar globalmente |
++| Vercel Dev usa tsx y pierde los tipos implícitos | Confirmado | Loader de la caché y adaptador oficial, ambos con AuthService real |
++| Falta registrar JwtModule o migrar a ESM | Descartado como explicación necesaria del fallo Dev | Los módulos funcionan en CJS compilado; incluso con JwtModule presente, tsx reproduce índice 1 |
++| Vitest actual pierde los metadatos | Descartado | Vitest 4.1.11 / Vite 8.2.2 los conserva sin insertarlos manualmente |
++| El compilador de build Vercel pierde los mismos metadatos | Descartado en el compilador probado | Se ejecutó el compilador interno real de @vercel/node; no el launcher remoto |
++| CLI distinta implica implementación distinta de esos builders | No sustentado | Los archivos comparados son idénticos por SHA256; dependencias y runtime remoto no quedan cubiertos |
++| Production no detectó servidor/handler porque bootstrap fue lento o falló | Hipótesis plausible | Main no exporta handler y no espera bootstrap a nivel de módulo; faltan logs/launcher remoto |
++| La configuración remota ejecutó exactamente el artefacto que probamos | Pendiente | No hay bundle remoto, configuración efectiva ni launcher de esa invocación |
++
++### Causa demostrada de Dev
++
++`@vercel/nestjs` delega `startDevServer` a `@vercel/node`. Este añade `--import`
++con `tsx` al proceso Node. tsx 4.21.0 usa esbuild y no emite los metadatos de tipos
++de decoradores. `@InjectPinoLogger` y `@InjectRepository` sí se ejecutan: persisten
++los tokens explícitos en las posiciones 0 y 6. Faltan los tipos implícitos de 1–5.
++Nest encuentra el primer hueco en `[1]`, que en el código corresponde a JwtService.
++La presencia de JwtModule no puede reponer el token de un parámetro ausente.
++
++No se añadieron `@Inject()` a servicios. La prueba negativa que elimina metadatos
++solo los altera en memoria y los restaura en `finally`.
++
++Evidencia conservada:
++
++```text
++[DI-METADATA compiled] PinoLogger, JwtService, UsersService,
++PasswordHasherService, CaptchaService, EmailService, Repository
++[official @vercel/node dev adapter] source-entry.ts
++  status=503 metadata=null error=UndefinedDependencyException indexOne=true
++[official @vercel/node dev adapter] compiled-entry.cjs
++  status=200 resolved=true metadata[1]=JwtService
++```
++
++El 503 es deliberadamente la respuesta del **fixture diagnóstico** ante el error
++de DI, no una reproducción literal de `NO_RESPONSE_FROM_FUNCTION`. El fixture
++inicia HTTP inmediatamente y resuelve AuthService al recibir la petición: aísla
++la transformación de la detección asíncrona del servidor. No representa todo
++AppModule dentro del runtime Vercel ni equivale a Production.
++
++## Investigación independiente de Production
++
++### Selección y transformación de `/var/task/src/main.js`
++
++El preset busca nombres como `src/main.ts` y verifica que el archivo importe
++`@nestjs/core`. El builder ejecuta el build configurado y **después vuelve a
++descubrir el entrypoint**. Sin `outputDirectory`, encuentra nuevamente `src/main.ts`.
++`@vercel/node` traza imports y convierte archivos TS; al construir `NodejsLambda`
++renombra la ruta relativa `.ts` a `.js`. Por eso el handler local esperado es
++`src/main.js`; `/var/task` es el prefijo observado en el log remoto aportado.
++
++Esto explica esa ruta sin suponer que se ejecutó `dist/main.js`. Ver `Build Completed`
++tras `nest build` tampoco demuestra que el runtime use su salida.
++
++La prueba del callback oficial produce:
++
++```text
++default=src/main.ts
++outputDirectory=dist => dist/main.js
++```
++
++La ruta de build usa el compilador TypeScript del proyecto mediante un servicio
++de compilación interno; no usa tsx para estos archivos. Para TS 6.0.3 la prueba
++ejecutó `register()` real y su camino de language service, con
++`EXPERIMENTAL_NODE_TYPESCRIPT_ERRORS=1`, igual que el preset. Se expuso la función
++interna añadiendo una exportación **solo a una copia en memoria** del bundle.
++No se alteró el paquete instalado.
++
++```text
++Using TypeScript 6.0.3 (local user-provided)
++src/main.ts => src/main.js
++src/auth/auth.service.ts => src/auth/auth.service.js
++[build compiler metadata] PinoLogger, JwtService, UsersService,
++PasswordHasherService, CaptchaService, EmailService, Repository
++```
++
++`results/compiler/` contiene ambos JS emitidos. AuthService se evalúa desde esa
++salida, resolviendo sus imports desde `dist` ya validado. Es una prueba real del
++compilador y del metadato de esa clase; **no** es una prueba del paquete remoto
++completo, de todas sus dependencias empaquetadas ni de la plataforma Linux.
++
++### Qué puede detectar Vercel y cuándo
++
++La documentación oficial del preset acepta un `bootstrap()` que llama
++`app.listen()` sin exportar una función. Por tanto, no es correcto concluir que
++todo NestJS 12 necesita un handler explícito.
++
++El adaptador Dev inspeccionado acepta funciones exportadas, handlers web y el
++servidor capturado interceptando `http.Server.prototype.listen`. Importa el módulo,
++desenvuelve defaults y, si no vio servidor, espera hasta 1000 ms adicionales.
++Su error final es `Can't detect way to handle request`, **distinto** del mensaje
++remoto. No trasladamos su límite de 1000 ms al runtime de Production.
++
++La prueba con el main emitido y un doble acotado de NestFactory registra:
++
++```text
++bootstrap:create-start -> module-evaluation-returned -> listen
++```
++
++`void bootstrap()` empieza a ejecutarse al evaluar el módulo, pero su Promise
++no se exporta ni se espera a nivel superior. La espera de NestFactory incluye
++la inicialización de providers y de TypeORM. Si esta espera falla o excede el
++criterio de detección del launcher, este puede no encontrar un servidor.
++
++**No conocemos el momento exacto del error remoto**: el log aportado no demuestra
++si fallaron imports antes de iniciar bootstrap, si bootstrap seguía esperando,
++o si abortó antes de listen. La prueba solo demuestra el orden del entrypoint
++cuando sus imports tienen éxito. La frase exacta `No exports found` no aparece
++en los bundles de builder/Dev examinados; falta el launcher alojado.
++
++Existe una respuesta de un mantenedor de Vercel de 2020 que relaciona ese mismo
++mensaje con `listen()` asíncrono. Es evidencia histórica del mecanismo, no una
++especificación del preset actual ni prueba de la causa de esta invocación.
++
++`NODE_OPTIONS=--experimental-require-module` no genera metadatos. El error ESM
++anterior y la conectividad/TLS de Aiven permanecen pendientes de evidencia del
++entorno remoto; no se cambiaron flags ni configuración de MySQL.
++
++### Comparación de versiones
++
++| Componente | Entorno observado local | CLI remoto reportado / manifiesto público |
++|---|---|---|
++| Node | 24.18.0 | 24 según contexto; patch efectivo por verificar |
++| pnpm | 11.16.0 | 10.28.0 reportado por el usuario |
++| Nest core / testing | 12.0.2 / 12.0.1 | Lockfile local; resolución remota por verificar |
++| TypeScript | 6.0.3 | Resolución remota por verificar |
++| TypeORM | 1.1.1 | Resolución remota por verificar |
++| Vitest / Vite | 4.1.11 / 8.2.2 | Solo pruebas locales |
++| Vercel CLI | 64.0.2 (caché existente) | 62.7.0 |
++| @vercel/nestjs | 19.0.0 | 17.0.0 en manifiesto CLI 62.7.0 |
++| @vercel/node | 24.0.0 | 22.0.0 en manifiesto CLI 62.7.0 |
++| @vercel/build-utils | 14.21.0 | 14.19.0 en manifiesto CLI 62.7.0 |
++
++Se descargaron los tres tarballs públicos antiguos únicamente para inspección,
++en `results/public-packages/`; no se instalaron ni se cambiaron dependencias.
++Los siguientes pares son idénticos byte a byte:
++
++| Archivo comparado | SHA256 común |
++|---|---|
++| @vercel/node 22 y 24 `dist/index.js` | `1bc7bb98d5438924482122317ac969831c570cd07cbfc86229459f013bedafea` |
++| @vercel/node 22 y 24 `dist/dev-server.mjs` | `7ea81d8ca4a08df82d2445989fd092d758715b131c03203998c1c5799f302ae9` |
++| @vercel/nestjs 17 y 19 `dist/index.js` | `c34cd6022f3b9091628c771e744b38b50c2c19f76e220f254b4aef180185ed01` |
++| build-utils 14.19 y 14.21 `dist/generate-node-builder-functions.js` | `61dca49fcd6dee7b42bdb7a1cd14491ff01e5e98a84a415ab32abe0b4b640891` |
++
++Esto compara los paquetes publicados asociados a las CLI. No certifica qué
++builder eligió realmente el build remoto ni la identidad de sus dependencias
++externas o del launcher gestionado por Vercel.
++
++## Matriz de pruebas
++
++Todos los comandos se ejecutan desde la raíz. `<vercel-node-package>` representa
++la ruta absoluta al `package.json` de @vercel/node ya instalado por la CLI.
++
++| Prueba / propósito | Comando | Entorno | Resultado real |
++|---|---|---|---|
++| Build Nest | `pnpm run build` | Node 24 / TS 6, sin arrancar app | **PASS**, salida 0 |
++| Metadatos, DI AuthModule/AppModule, HTTP público y errores, caída global por DI, rawBody PayPal | `pnpm exec node test/diagnostics/run.cjs compiled` | Node, JS de dist, persistencia simulada | **PASS**, 6/6 |
++| Metadatos e inyección real de AuthService bajo transformador de pruebas | `pnpm exec node test/diagnostics/run.cjs vitest` | Vitest/Vite actuales | **PASS**, 1/1; resultado previo registrado en conversación |
++| Reproducir ausencia de metadatos e índice 1 | `pnpm exec node test/diagnostics/run.cjs tsx <vercel-node-package>` | Loader tsx 4.21.0 de la CLI | **PASS** como prueba negativa: reproduce fallo esperado |
++| Callback de entrada y HTTP fuente frente a compilado | `pnpm exec node test/diagnostics/run.cjs vercel <vercel-node-package>` | Adaptador oficial Dev, fixtures | **PASS**, TS falla DI / compilado resuelve |
++| Compilador real del builder y orden de bootstrap | `pnpm exec node test/diagnostics/run.cjs compiler <vercel-node-package>` | @vercel/node, TS6; NestFactory simulado solo para orden | **PASS**; conserva JwtService y demuestra retorno anterior a listen |
++| Regresión existente | `pnpm exec node test/diagnostics/run.cjs regression` | Vitest, entorno ficticio | **FAIL**: 60 PASS, 5 FAIL, 11 SKIPPED; resultado previo en conversación |
++| E2E heredado | `pnpm exec node test/diagnostics/run.cjs e2e` | Vitest, host ficticio 127.0.0.1:1 | **FAIL**: conexión rechazada y cleanup de app no creada |
++| Suites MySQL existentes | Incluidas en regression, flags en 0 | Sin daemon Docker disponible | **SKIPPED**, 11 casos; no son PASS |
++| Persistencia real de categorías / esquema y fixtures desechables | Pendiente de MySQL desechable y prueba SQL específica | MySQL | **NOT RUN** |
++| Lectura de PDF/EPUB/HTML/texto con archivos reales | No existe suite específica en el repositorio | Reading | **NOT RUN**; solo carga e inyección al iniciar AppModule |
++| PayPal firma/idempotencia/transacciones reales | Solo se probó frontera HTTP/rawBody | Proveedor / DB | **NOT RUN** |
++| Función empaquetada y launcher remotos | Requiere artefacto/entorno autorizado | Production / Preview | **NOT RUN** |
++| Lint | `pnpm run lint` | Oxlint, sin autofix | **PASS**, con 10 advertencias previas de imports/parámetros no usados |
++| Diff | `git diff --check` y comprobación individual `--no-index --check` | Git | **PASS**, incluidos los nuevos archivos |
++
++Los comandos ejecutados por el agente usaron `node test/diagnostics/run.cjs ...`;
++el prefijo `pnpm exec` es la forma equivalente de reproducción con pnpm. El script
++lanza el Node actual, usa timeout de 90 s y escribe logs locales sin códigos ANSI.
++No ejecutarlo en paralelo con `pnpm run build`, que borra/recrea `dist`.
++
++Incidencias del desarrollo de las pruebas, ya corregidas: una lectura de dist
++coincidió con una reconstrucción y falló `MODULE_NOT_FOUND`; el primer supuesto
++de que Vitest no emitía metadatos resultó falso; `mergeConfig` concatenó includes
++y se sustituyó por composición que conserva los plugins; el fixture de webhook
++necesitó importar PassportModule; NODE_OPTIONS requirió normalizar barras en
++Windows. Ninguno justifica modificar servicios de producción.
++
++### Cinco fallos previos separados
++
++1. Dos casos, access/refresh: un JWT firmado sin `exp` es aceptado, mientras la
++   prueba exige rechazo (`auth-infrastructure.spec.ts:176`). Las estrategias
++   validan `sub` y estado; `ignoreExpiration: false` comprueba una expiración
++   presente, pero el código no exige que exista `exp`. Es una divergencia real
++   respecto a la expectativa de la suite; no una consecuencia del compilador.
++2. Dos casos de cookies: el mock `testEnvs` no tiene `cookies.authMaxAge` ni
++   `cookies.refreshMaxAge`, que el servicio actual requiere.
++3. Un caso de limpieza de cookies: la prueba anterior falla antes de restaurar
++   `isProduction=false`, dejando `secure=true` para el siguiente caso. Es un
++   fallo de aislamiento encadenado, no evidencia por sí solo de cookies erróneas
++   en producción.
++
++No se corrigieron estos cinco casos. Analytics añade metadatos a mano en su prueba
++HTTP; esa justificación quedó desactualizada para Vite8 observado. El e2e aún
++espera `Hello World!` (`test/app.e2e-spec.ts:23`), pero AppModule devuelve 404 en `/`.
++Además su `afterEach` llama `app.close()` aunque el arranque haya fallado.
++
++## Solución mínima propuesta, no aplicada
++
++Recomendación: conservar el monolito, Node24, Nest12 y CommonJS. Primero probar
++el preset NestJS con salida compilada seleccionada explícitamente. El callback
++de los builders comparados soporta `outputDirectory: "dist"` y encuentra
++`dist/main.js` sin cambiar `src/main.ts`.
++
++Cambio concreto propuesto: **crear únicamente `vercel.json`**, sujeto a aprobación
++y a confirmar que no hay overrides remotos contradictorios:
++
++```json
++{
++  "framework": "nestjs",
++  "buildCommand": "pnpm run build",
++  "outputDirectory": "dist"
++}
++```
++
++Esta propuesta evita el fallo de metadatos confirmado al usar JS emitido por Nest.
++**No se ha demostrado que corrija `No exports found`**: conserva el bootstrap
++asíncrono y depende de cómo el runtime alojado detecte el servidor.
++`dist` debe existir antes de usarlo en Dev; reconstruirlo después de cambios.
++
++| Alternativa | Evidencia / coste | Decisión |
++|---|---|---|
++| Preset NestJS + dist explícito | Callback y fixture compilado comprobados; un archivo de configuración | Primera prueba recomendada, pendiente aprobación |
++| Corregir/reemplazar transformación de Dev | El problema está en tsx; requiere mecanismo soportado de override o corrección upstream | No inventar opción de Vercel ni cambiar el proyecto a SWC/ESM |
++| Handler HTTP explícito con inicialización compartida | Permite que el runtime espere un handler que aguarda bootstrap | Considerar si se confirma fallo de detección asíncrona; mayor cambio, no aplicado |
++| Cambiar hosting/modelo de ejecución | Puede eliminar dependencia del launcher serverless, pero agrega operación y migración | No justificado todavía |
++| @Inject masivo, migración ESM o downgrade | No repone una cadena de compilación correcta ni explica Production | No recomendado |
++
++Impactos de seleccionar dist:
++
++- Local: scripts Nest y `start:prod` permanecen iguales. Vercel Dev requiere build
++  previo; la experiencia de recarga del TS original no queda validada.
++- TypeORM: misma configuración, tokens y entidades. No agrega migrationsRun ni
++  synchronize. Las migraciones siguen ejecutándose únicamente mediante sus scripts
++  explícitos. Falta verificar empaquetado, TLS/conectividad y arranque frío con DB de prueba.
++- PayPal: no cambia controller/provider. `rawBody: true` sigue en main. Se verificaron
++  los bytes exactos del webhook y rechazo sin cuerpo en Nest local; falta la función
++  empaquetada, validación de firma, repetición e idempotencia sobre entorno de prueba.
++- Reading: no cambia código ni políticas. AppModule carga sus providers, pero deben
++  probarse fixtures PDF/EPUB/HTML/texto, dependencias nativas, imports ESM dinámicos y
++  assets dentro del bundle Linux. La carga local no demuestra ese empaquetado.
++- Cookies/CORS/pipes/filtro: el entrypoint original permanece. Una futura opción con
++  handler explícito tendría que preservar exactamente esas configuraciones, rawBody
++  y una única inicialización concurrente de Nest/TypeORM.
++
++## Reproducción y pasos pendientes
++
++Pruebas básicas sin credenciales productivas:
++
++```powershell
++pnpm install --frozen-lockfile  # solo si faltan dependencias
++pnpm run build
++pnpm exec node test/diagnostics/run.cjs compiled
++pnpm exec node test/diagnostics/run.cjs vitest
++pnpm exec node test/diagnostics/run.cjs regression
++pnpm exec node test/diagnostics/run.cjs e2e
++pnpm run lint
++```
++
++Últimos dos comandos de pruebas pueden fallar por las incidencias descritas.
++El runner limpia el entorno heredado, evita `.env`, asigna valores ficticios,
++deshabilita suites MySQL optativas y utiliza loopback/puerto 1 para la DB. El guard
++adicional sobre `DataSource.initialize` protege el proceso CJS. Vitest puede cargar
++TypeORM en otro contexto: el e2e observado intentó loopback y recibió ECONNREFUSED;
++no debe describirse como interceptado por ese guard ni como acceso a Aiven.
++
++Con la caché de CLI disponible en este equipo:
++
++```powershell
++$vercelNodePackage = 'C:\Users\jhonn\AppData\Local\npm-cache\_npx\69f9afb961c37556\node_modules\@vercel\node\package.json'
++pnpm exec node test/diagnostics/run.cjs tsx $vercelNodePackage
++pnpm exec node test/diagnostics/run.cjs vercel $vercelNodePackage
++pnpm exec node test/diagnostics/run.cjs compiler $vercelNodePackage
++```
++
++En otro equipo, usar la ruta real de su CLI, registrar versiones y no aceptar
++silenciosamente resultados de otra versión como equivalentes. No se instala CLI
++desde las pruebas. La comparación opcional con node22 se marca NOT RUN si no se
++descargó su artefacto; la compilación local sigue siendo comprobable.
++
++Para cerrar Production se necesita, sin credenciales ni cuerpos privados:
++
++1. Obtener con autorización el handler/config efectivo, versión de builder/Node,
++   launcher y archivos JS de la función que falló. Inspeccionar `.vc-config.json`
++   o metadatos equivalentes y la presencia de design:paramtypes en AuthService.
++2. Capturar orden de hitos seguros: inicio/fin de imports, inicio de bootstrap,
++   final de NestFactory.create, init y listen; registrar duración y tipo/código
++   de error sin variables de entorno ni datos de proveedores.
++3. Comparar baseline y dist en un entorno aprobado con MySQL desechable. No ejecutar
++   `vercel dev` directamente en este checkout usando el `.env` de producción.
++4. Autorizar por separado una Preview si se requiere verificar el launcher alojado.
++   Probar arranque frío, solicitudes concurrentes y repetidas, `/categories`, errores,
++   autenticación, cookies, webhook/rawBody y Reading con datos controlados.
++5. Si dist falla al detectar servidor y los metadatos están intactos, aislar la espera
++   de TypeORM/bootstrap antes de proponer un handler. No usar un cambio de entrada
++   para ocultar una conexión fallida.
++
++MySQL real está pendiente porque `docker info` no encontró el daemon. Se puede
++preparar una instancia local independiente cuando Docker esté disponible:
++
++```powershell
++docker run --name bibliolink-diagnostic-mysql --rm -d -p 127.0.0.1:33070:3306 -e MYSQL_ROOT_PASSWORD=diagnostic-only -e MYSQL_DATABASE=bibliolink_diagnostic mysql:8.4
++docker exec bibliolink-diagnostic-mysql mysqladmin ping -pdiagnostic-only
++```
++
++Son instrucciones **no ejecutadas**. Antes de correr consultas de categorías se
++debe añadir una suite específica con schema/fixtures propios y conexión explícita
++a esa instancia. Los mocks actuales no verifican SQL, constraints ni transacciones.
++No habilitar los flags MySQL existentes con el `.env` productivo.
++
++## Archivos y revisión
++
++| Archivo nuevo | Propósito |
++|---|---|
++| `environment.cjs` | Entorno ficticio antes de imports y guard adicional CJS |
++| `run.cjs` | Comandos reproducibles, aislamiento de env, timeout y logs |
++| `compiled.test.cjs` | Seis integraciones sobre dist, incluido rawBody |
++| `metadata.probe.ts` | Metadatos del transformador Vitest real |
++| `vitest.config.mts` | Reutiliza plugins existentes y limita esta suite |
++| `source-probe.cjs` | Reproducción de DI con el tsx de Vercel |
++| `runtime-fixture.cjs` | HTTP diagnóstico que resuelve AuthService real |
++| `fixtures/source-entry.ts` | Entrada TS para el adaptador Dev |
++| `fixtures/compiled-entry.cjs` | Entrada equivalente que carga dist |
++| `vercel-runtime.cjs` | Callback oficial y ejecución del adaptador Dev |
++| `compiler-probe.cjs` | Compilador real de build, metadatos y orden del main |
++| `.gitignore` | Excluye resultados regenerables y paquetes públicos |
++| `README.md` | Informe, resultados y propuesta no aplicada |
++
++Los logs y JS emitidos están bajo `results/` y no se versionan. El diff completo
++de archivos nuevos se entrega en `results/diagnostic.patch`; no modifica el índice.
++No se alteró código existente para hacer pasar las pruebas.
++
++## Fuentes y puntos precisos de inspección
++
++- [NestJS en Vercel: detección y ejemplo con listen](https://vercel.com/docs/frameworks/backend/nestjs).
++- [Limitación de emitDecoratorMetadata en esbuild](https://esbuild.github.io/content-types/#typescript).
++- [Vite 8 usa Oxc/Rolldown](https://vite.dev/guide/migration.html).
++- [Fork del servidor Dev](https://github.com/vercel/vercel/blob/main/packages/node/src/fork-dev-server.ts).
++- [Compilador de TypeScript del builder](https://github.com/vercel/vercel/blob/main/packages/node/src/typescript.ts).
++- [Construcción de la función](https://github.com/vercel/vercel/blob/main/packages/node/src/build.ts).
++- [Adaptador Dev y captura de listen](https://github.com/vercel/vercel/blob/main/packages/node/src/serverless-functions/serverless-handler.mts).
++- [Manifiesto público CLI 62.7.0](https://registry.npmjs.org/vercel/62.7.0).
++- [Respuesta histórica del mantenedor, 2020](https://github.com/vercel/vercel/discussions/4333).
++
++Las referencias a `main` upstream son contexto vigente, no sustituyen la inspección
++versionada. En los paquetes locales comparados: Nest `dist/index.js:38` (detección),
++`:72` (delegación Dev); build-utils `dist/generate-node-builder-functions.js:97`
++(outputDirectory); Node `dist/index.js:72159` (register), `:72625` (compilación),
++`:72928` (handler), `:73039` (NodejsLambda), `:73147` (tsx);
++`dist/dev-server.mjs:1158` (listen), `:1214` (espera Dev).
++
++La evidencia permite recomendar y probar una corrección mínima del problema Dev.
++La causa raíz concreta de la invocación de Production continúa pendiente.
+diff --git "a/test/diagnostics\\metadata.probe.ts" "b/test/diagnostics\\metadata.probe.ts"
+new file mode 100644
+index 0000000..dd5d542
+--- /dev/null
++++ "b/test/diagnostics\\metadata.probe.ts"
+@@ -0,0 +1,34 @@
++import 'reflect-metadata';
++import { expect, it } from 'vitest';
++import { JwtModule, JwtService } from '@nestjs/jwt';
++import { Test } from '@nestjs/testing';
++import { getRepositoryToken } from '@nestjs/typeorm';
++import { getLoggerToken } from 'nestjs-pino';
++import { AuthService } from '../../src/auth/auth.service';
++import { PasswordResetToken } from '../../src/auth/entities/password-reset-token.entity';
++import { UsersService } from '../../src/users/users.service';
++import { PasswordHasherService } from '../../src/common/security/password-hasher.service';
++import { CaptchaService } from '../../src/captcha/captcha.service';
++import { EmailService } from '../../src/email/email.service';
++import { PinoLogger } from 'nestjs-pino';
++import { Repository } from 'typeorm';
++
++it('current Vitest preserves implicit types and explicit tokens and resolves the real AuthService', async () => {
++  const metadata: unknown = Reflect.getMetadata('design:paramtypes', AuthService);
++  console.log('[DI-METADATA vitest]', metadata ?? 'METADATA_NOT_FOUND');
++  expect(metadata).toEqual([PinoLogger, JwtService, UsersService, PasswordHasherService, CaptchaService, EmailService, Repository]);
++  const overrides: { index: number; param: unknown }[] = Reflect.getMetadata('self:paramtypes', AuthService);
++  expect(overrides.map(({ index }) => index).sort()).toEqual([0, 6]);
++  const module = await Test.createTestingModule({
++    imports: [JwtModule.register({ secret: process.env.JWT_ACCESS_SECRET })],
++    providers: [AuthService,
++      { provide: getLoggerToken(AuthService.name), useValue: {} },
++      { provide: getRepositoryToken(PasswordResetToken), useValue: {} },
++      ...[UsersService, PasswordHasherService, CaptchaService, EmailService].map((provide) => ({ provide, useValue: {} })),
++    ],
++  }).compile();
++  try {
++    expect(module.get(AuthService)).toBeInstanceOf(AuthService);
++    expect(module.get(JwtService)).toBeInstanceOf(JwtService);
++  } finally { await module.close(); }
++});
+diff --git "a/test/diagnostics\\fixtures\\source-entry.ts" "b/test/diagnostics\\fixtures\\source-entry.ts"
+new file mode 100644
+index 0000000..9e2f739
+--- /dev/null
++++ "b/test/diagnostics\\fixtures\\source-entry.ts"
+@@ -0,0 +1,9 @@
++import 'reflect-metadata';
++import { AuthService } from '../../../src/auth/auth.service';
++import { PasswordResetToken } from '../../../src/auth/entities/password-reset-token.entity';
++import { UsersService } from '../../../src/users/users.service';
++import { PasswordHasherService } from '../../../src/common/security/password-hasher.service';
++import { CaptchaService } from '../../../src/captcha/captcha.service';
++import { EmailService } from '../../../src/email/email.service';
++const { serve } = require('../runtime-fixture.cjs');
++serve(AuthService, PasswordResetToken, [UsersService, PasswordHasherService, CaptchaService, EmailService]);
+diff --git "a/test/diagnostics\\fixtures\\compiled-entry.cjs" "b/test/diagnostics\\fixtures\\compiled-entry.cjs"
+new file mode 100644
+index 0000000..5294f00
+--- /dev/null
++++ "b/test/diagnostics\\fixtures\\compiled-entry.cjs"
+@@ -0,0 +1,8 @@
++require('reflect-metadata');
++const { AuthService } = require('../../../dist/auth/auth.service.js');
++const { PasswordResetToken } = require('../../../dist/auth/entities/password-reset-token.entity.js');
++const { UsersService } = require('../../../dist/users/users.service.js');
++const { PasswordHasherService } = require('../../../dist/common/security/password-hasher.service.js');
++const { CaptchaService } = require('../../../dist/captcha/captcha.service.js');
++const { EmailService } = require('../../../dist/email/email.service.js');
++require('../runtime-fixture.cjs').serve(AuthService, PasswordResetToken, [UsersService, PasswordHasherService, CaptchaService, EmailService]);
+diff --git "a/test/diagnostics\\environment.cjs" "b/test/diagnostics\\environment.cjs"
+new file mode 100644
+index 0000000..6d755aa
+--- /dev/null
++++ "b/test/diagnostics\\environment.cjs"
+@@ -0,0 +1,39 @@
++// Loaded before application imports. Never read the developer's .env.
++const path = require('node:path');
++const fs = require('node:fs');
++process.env.DOTENV_CONFIG_PATH = path.join(__dirname, '.nonexistent-diagnostic-env');
++process.env.DOTENV_CONFIG_QUIET = 'true';
++const declarations = fs.readFileSync(path.join(__dirname, '../../src/config/envs.ts'), 'utf8');
++for (const match of declarations.matchAll(/^    ([A-Z][A-Z_]+):/gm)) {
++  delete process.env[match[1]];
++}
++Object.assign(process.env, {
++  NODE_ENV: 'test', PORT: '0', FRONTEND_URL: 'http://localhost:5173',
++  DATABASE_TYPE: 'mysql', DATABASE_HOST: '127.0.0.1', DATABASE_PORT: '1',
++  DATABASE_USER: 'diagnostic', DATABASE_PASSWORD: 'diagnostic-only',
++  DATABASE_NAME: 'bibliolink_diagnostic', PASSWORD_HASH_ROUNDS: '10',
++  JWT_ACCESS_SECRET: 'diagnostic-access-secret-0000000000000000',
++  JWT_REFRESH_SECRET: 'diagnostic-refresh-secret-000000000000000',
++  JWT_ACCESS_EXPIRES_IN: '900', JWT_REFRESH_EXPIRES_IN: '604800',
++  AUTH_COOKIE_MAX_AGE: '900000', REFRESH_COOKIE_MAX_AGE: '604800000',
++  BREVO_API_KEY: 'diagnostic-only', EMAIL_SENDER_EMAIL: 'test@example.com',
++  EMAIL_PASSWORD_RESET_TEMPLATE_ID: '1', CAPTCHA_SECRET_KEY: 'diagnostic-only',
++  PAYMENT_CLIENT_ID: 'diagnostic-only', PAYMENT_CLIENT_SECRET: 'diagnostic-only',
++  PAYMENT_BASE_URL: 'http://127.0.0.1:1', PAYMENT_PLAN_ID: 'diagnostic-only',
++  PAYMENT_WEBHOOK_ID: 'diagnostic-only', PAYMENT_CHECKOUT_REFERENCE_SECRET: 'd'.repeat(43),
++  THROTTLE_TTL: '60000', THROTTLE_LIMIT: '1000',
++  REGISTER_THROTTLE_TTL: '60000', REGISTER_THROTTLE_LIMIT: '1000',
++  LOGIN_THROTTLE_TTL: '60000', LOGIN_THROTTLE_LIMIT: '1000',
++  FORGOT_PASSWORD_THROTTLE_TTL: '60000', FORGOT_PASSWORD_THROTTLE_LIMIT: '1000',
++  RESET_PASSWORD_THROTTLE_TTL: '60000', RESET_PASSWORD_THROTTLE_LIMIT: '1000',
++  ADS_MYSQL_TESTS: '0', ANALYTICS_MYSQL_TESTS: '0',
++});
++// Additional CJS-process guard. Vitest may load TypeORM in a separate module
++// realm; the primary boundary there remains the sanitized loopback-only config.
++const { DataSource } = require('typeorm');
++DataSource.prototype.initialize = async function () {
++  throw new Error('Diagnostic safety boundary: real database initialization forbidden');
++};
++globalThis.fetch = async () => {
++  throw new Error('Diagnostic safety boundary: external fetch forbidden');
++};
+diff --git "a/test/diagnostics\\compiler-probe.cjs" "b/test/diagnostics\\compiler-probe.cjs"
+new file mode 100644
+index 0000000..e19435b
+--- /dev/null
++++ "b/test/diagnostics\\compiler-probe.cjs"
+@@ -0,0 +1,88 @@
++require('./environment.cjs');
++require('reflect-metadata');
++const assert = require('node:assert/strict');
++const { Module, createRequire } = require('node:module');
++const { readFileSync, writeFileSync, mkdirSync } = require('node:fs');
++const { resolve, dirname, join } = require('node:path');
++const { createHash } = require('node:crypto');
++const vm = require('node:vm');
++const { JwtService } = require('@nestjs/jwt');
++const root = resolve(__dirname, '../..');
++const cached = createRequire(resolve(process.argv[2]));
++const filename = cached.resolve('@vercel/node');
++const source = readFileSync(filename, 'utf8');
++
++// Expose the actual internal compiler in memory. Do not edit installed packages.
++// This exercises the build compiler, NOT the private hosted invocation runtime.
++assert.match(source, /function register\(opts = \{\}\)/);
++const instrumented = new Module(filename);
++instrumented.filename = filename;
++instrumented.paths = Module._nodeModulePaths(dirname(filename));
++instrumented._compile(source + '\nmodule.exports.diagnostic = { register, renameTStoJS };\n', filename);
++const { register, renameTStoJS } = instrumented.exports.diagnostic;
++const sha256 = (value) => createHash('sha256').update(value).digest('hex');
++
++async function run() {
++  process.env.EXPERIMENTAL_NODE_TYPESCRIPT_ERRORS = '1';
++  const compile = register({ basePath: root, project: join(root, 'src/main.ts'), rootDir: root, files: true, nodeVersionMajor: 24 });
++  const output = resolve(__dirname, 'results/compiler');
++  mkdirSync(output, { recursive: true });
++  for (const file of ['src/main.ts', 'src/auth/auth.service.ts']) {
++    const absolute = join(root, file);
++    const result = await compile(readFileSync(absolute, 'utf8'), absolute);
++    const target = join(output, file.endsWith('main.ts') ? 'main.js' : 'auth.service.js');
++    writeFileSync(target, result.code);
++    console.log('[build compiler]', file, '=>', renameTStoJS(file), 'sha256=' + sha256(result.code));
++    if (file.endsWith('auth.service.ts')) {
++      assert.match(result.code, /__metadata\("design:paramtypes"/);
++      // Resolve imported dependencies from the already verified Nest build.
++      // Only AuthService itself is evaluated from the Vercel compiler output.
++      const authPath = join(root, 'dist/auth/auth.service.js');
++      const auth = new Module(authPath);
++      auth.filename = authPath;
++      auth.paths = Module._nodeModulePaths(dirname(authPath));
++      auth._compile(result.code, authPath);
++      const metadata = Reflect.getMetadata('design:paramtypes', auth.exports.AuthService);
++      assert.equal(metadata.length, 7);
++      assert.equal(metadata[1], JwtService);
++      console.log('[build compiler metadata]', metadata.map((item) => item.name).join(', '));
++    } else {
++      const events = [];
++      let release;
++      const waiting = new Promise((accept) => { release = accept; });
++      const app = { useLogger() {}, get() {}, use() {}, enableCors() {}, useGlobalPipes() {}, useGlobalFilters() {},
++        listen: async () => { events.push('listen'); } };
++      const localRequire = createRequire(join(root, 'dist/main.js'));
++      const context = {
++        exports: {},
++        require(id) {
++          if (id === '@nestjs/core') return { NestFactory: { create: () => {
++            events.push('bootstrap:create-start');
++            return waiting.then(() => app);
++          } } };
++          if (id === './app.module') return { AppModule: class AppModule {} };
++          return localRequire(id);
++        },
++      };
++      vm.runInNewContext(result.code, context, { filename: target });
++      events.push('module-evaluation-returned');
++      assert.deepEqual(events, ['bootstrap:create-start', 'module-evaluation-returned']);
++      assert.deepEqual(Object.keys(context.exports), []);
++      release();
++      await new Promise((accept) => setImmediate(accept));
++      assert.equal(events.at(-1), 'listen');
++      console.log('[bootstrap ordering; NestFactory double]', events.join(' -> '));
++    }
++  }
++  console.log('[cached builder SHA256]', sha256(source));
++  const olderPath = resolve(__dirname, 'results/public-packages/node22/package/dist/index.js');
++  try {
++    const oldHash = sha256(readFileSync(olderPath));
++    assert.equal(oldHash, sha256(source));
++    console.log('[public node22 / cached node24] index.js byte-identical');
++  } catch (error) {
++    if (error.code === 'ENOENT') console.log('[comparison] NOT RUN: optional public node22 artifact missing');
++    else throw error;
++  }
++}
++run().catch((error) => { console.error(error); process.exitCode = 1; });
+diff --git "a/test/diagnostics\\compiled.test.cjs" "b/test/diagnostics\\compiled.test.cjs"
+new file mode 100644
+index 0000000..a0bad7f
+--- /dev/null
++++ "b/test/diagnostics\\compiled.test.cjs"
+@@ -0,0 +1,160 @@
++require('./environment.cjs');
++require('reflect-metadata');
++const assert = require('node:assert/strict');
++const { test } = require('node:test');
++const { readFileSync } = require('node:fs');
++const { resolve } = require('node:path');
++const { Test } = require('@nestjs/testing');
++const { Module, Global, ValidationPipe } = require('@nestjs/common');
++const { JwtService } = require('@nestjs/jwt');
++const { PassportModule } = require('@nestjs/passport');
++const { DataSource, Repository } = require('typeorm');
++const { getRepositoryToken } = require('@nestjs/typeorm');
++const { LoggerModule, PinoLogger, getLoggerToken } = require('nestjs-pino');
++const request = require('supertest');
++const { AuthService } = require('../../dist/auth/auth.service.js');
++const { AuthModule } = require('../../dist/auth/auth.module.js');
++const { UsersService } = require('../../dist/users/users.service.js');
++const { PasswordHasherService } = require('../../dist/common/security/password-hasher.service.js');
++const { CaptchaService } = require('../../dist/captcha/captcha.service.js');
++const { EmailService } = require('../../dist/email/email.service.js');
++const { PasswordResetToken } = require('../../dist/auth/entities/password-reset-token.entity.js');
++const { CategoriesModule } = require('../../dist/categories/categories.module.js');
++const { Category } = require('../../dist/categories/entities/category.entity.js');
++const { HttpExceptionFilter } = require('../../dist/common/filters/http-exception.filter.js');
++const { AppModule } = require('../../dist/app.module.js');
++const { SubscriptionsController } = require('../../dist/subscriptions/subscriptions.controller.js');
++const { SubscriptionsService } = require('../../dist/subscriptions/subscriptions.service.js');
++
++function persistenceDouble() {
++  let failure = false;
++  const rows = [{ categoryId: '1', code: 'fiction', name: 'Ficción', bookCount: '2' }];
++  const query = {};
++  for (const method of ['leftJoin', 'select', 'addSelect', 'groupBy', 'orderBy', 'addOrderBy']) {
++    query[method] = () => query;
++  }
++  query.getRawMany = async () => {
++    if (failure) throw new Error('diagnostic SQL detail must not reach HTTP');
++    return rows;
++  };
++  const categories = { createQueryBuilder: () => query, findOne: async () => null };
++  const repositories = new Map([[Category, categories]]);
++  const source = {
++    options: { type: 'mysql' }, entityMetadatas: [], manager: {}, isInitialized: false,
++    getRepository(entity) {
++      if (!repositories.has(entity)) repositories.set(entity, {});
++      return repositories.get(entity);
++    },
++  };
++  return { source, fail: () => { failure = true; } };
++}
++
++function infrastructure(source) {
++  class DiagnosticPersistenceModule {}
++  Global()(DiagnosticPersistenceModule);
++  Module({ providers: [{ provide: DataSource, useValue: source }], exports: [DataSource] })(DiagnosticPersistenceModule);
++  return [DiagnosticPersistenceModule, LoggerModule.forRoot({ pinoHttp: { level: 'silent' } })];
++}
++
++test('nest build emits the seven real constructor types and explicit override tokens', () => {
++  const artifact = readFileSync(resolve(__dirname, '../../dist/auth/auth.service.js'), 'utf8');
++  assert.match(artifact, /__metadata\("design:paramtypes"/);
++  const dependencies = Reflect.getMetadata('design:paramtypes', AuthService);
++  assert.deepEqual(dependencies, [PinoLogger, JwtService, UsersService, PasswordHasherService, CaptchaService, EmailService, Repository]);
++  const overrides = Reflect.getMetadata('self:paramtypes', AuthService);
++  assert.deepEqual(overrides.map(({ index }) => index).sort(), [0, 6]);
++  assert.equal(overrides.find(({ index }) => index === 0).param, getLoggerToken('AuthService'));
++  assert.equal(overrides.find(({ index }) => index === 6).param, getRepositoryToken(PasswordResetToken));
++  console.log('[DI-METADATA compiled]', dependencies.map((item) => item.name).join(', '));
++});
++
++test('real AuthModule resolves JwtService and every AuthService dependency', { timeout: 15000 }, async () => {
++  const { source } = persistenceDouble();
++  const module = await Test.createTestingModule({ imports: [...infrastructure(source), AuthModule] }).compile();
++  try {
++    await module.init();
++    const auth = module.get(AuthService);
++    assert.ok(auth instanceof AuthService);
++    assert.equal(auth.jwtService, module.get(JwtService));
++    for (const field of ['logger', 'usersService', 'passwordHasher', 'captchaService', 'emailService', 'passwordResetTokensRepository']) {
++      assert.ok(auth[field], `Missing injected dependency: ${field}`);
++    }
++    const token = await module.get(JwtService).signAsync({ sub: '7' });
++    assert.equal((await module.get(JwtService).verifyAsync(token)).sub, '7');
++  } finally { await module.close(); }
++});
++
++test('CategoriesModule serves unauthenticated HTTP using real controller/service and fake repository', { timeout: 15000 }, async () => {
++  const db = persistenceDouble();
++  const module = await Test.createTestingModule({ imports: [...infrastructure(db.source), CategoriesModule] }).compile();
++  const app = module.createNestApplication({ logger: false, rawBody: true });
++  try {
++    app.useGlobalPipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }));
++    app.useGlobalFilters(new HttpExceptionFilter());
++    await app.init();
++    await request(app.getHttpServer()).get('/categories').timeout(3000).expect(200)
++      .expect([{ categoryId: 1, code: 'fiction', name: 'Ficción', bookCount: 2 }]);
++    await request(app.getHttpServer()).get('/categories/invalid-code/books').timeout(3000).expect(400);
++    db.fail();
++    const response = await request(app.getHttpServer()).get('/categories').timeout(3000).expect(500);
++    assert.equal(response.body.message, 'Ha ocurrido un error inesperado.');
++    assert.equal(response.body.statusCode, 500);
++    assert.doesNotMatch(JSON.stringify(response.body), /SQL detail|stack/);
++  } finally { await app.close(); }
++});
++
++test('real AppModule initializes and exposes public categories with the DataSource boundary replaced', { timeout: 15000 }, async () => {
++  const { source } = persistenceDouble();
++  const module = await Test.createTestingModule({ imports: [AppModule] })
++    .overrideProvider(DataSource).useValue(source)
++    .overrideProvider('pino-params').useValue({ pinoHttp: { level: 'silent' } })
++    .compile();
++  const app = module.createNestApplication({ logger: false, rawBody: true });
++  try {
++    await app.init();
++    assert.ok(module.get(AuthService).jwtService instanceof JwtService);
++    await request(app.getHttpServer()).get('/categories').timeout(3000).expect(200);
++    await request(app.getHttpServer()).get('/').timeout(3000).expect(404);
++  } finally { await app.close(); }
++});
++
++test('losing only AuthService implicit metadata prevents global startup despite registered JwtService', { timeout: 15000 }, async () => {
++  const metadata = Reflect.getMetadata('design:paramtypes', AuthService);
++  Reflect.deleteMetadata('design:paramtypes', AuthService);
++  try {
++    const { source } = persistenceDouble();
++    await assert.rejects(
++      Test.createTestingModule({ imports: [AppModule] }).overrideProvider(DataSource).useValue(source).compile(),
++      (error) => {
++        assert.equal(error.constructor.name, 'UndefinedDependencyException');
++        assert.match(error.message, /AuthService/);
++        assert.match(error.message, /index \[1\]/);
++        return true;
++      },
++    );
++  } finally { Reflect.defineMetadata('design:paramtypes', metadata, AuthService); }
++});
++
++test('PayPal HTTP controller receives the exact raw JSON bytes; missing rawBody is rejected', { timeout: 15000 }, async () => {
++  const raw = '{ "id" : "diagnostic-event", "resource" : { "value" : 1 } }';
++  let received;
++  const module = await Test.createTestingModule({
++    imports: [PassportModule.register({ session: false })],
++    controllers: [SubscriptionsController],
++    providers: [{ provide: SubscriptionsService, useValue: {
++      processPaymentWebhook: async (input) => { received = input; },
++    } }],
++  }).compile();
++  const app = module.createNestApplication({ logger: false, rawBody: true });
++  try {
++    await app.init();
++    await request(app.getHttpServer()).post('/subscriptions/webhooks/paypal')
++      .set('Content-Type', 'application/json').send(raw).timeout(3000).expect(204);
++    assert.ok(Buffer.isBuffer(received.rawBody));
++    assert.deepEqual(received.rawBody, Buffer.from(raw));
++    received = undefined;
++    await request(app.getHttpServer()).post('/subscriptions/webhooks/paypal')
++      .timeout(3000).expect(400);
++    assert.equal(received, undefined);
++  } finally { await app.close(); }
++});
+diff --git "a/test/diagnostics\\.gitignore" "b/test/diagnostics\\.gitignore"
+new file mode 100644
+index 0000000..fbca225
+--- /dev/null
++++ "b/test/diagnostics\\.gitignore"
+@@ -0,0 +1 @@
++results/

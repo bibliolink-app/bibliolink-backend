@@ -1,0 +1,23 @@
+{
+  "status": "FAIL",
+  "handler": "dist/main.js",
+  "databaseConnected": false,
+  "authMetadata": "PASS",
+  "authDependencyTypes": [
+    "PinoLogger",
+    "JwtService",
+    "UsersService",
+    "PasswordHasherService",
+    "CaptchaService",
+    "EmailService",
+    "Repository"
+  ],
+  "explicitInjectionIndexes": [
+    0,
+    6
+  ],
+  "appModuleImport": true,
+  "entityTableMetadataCount": 14,
+  "errorName": "DriverPackageNotInstalledError",
+  "message": "Mysql package has not been found installed. Please run \"npm install mysql2\"."
+}

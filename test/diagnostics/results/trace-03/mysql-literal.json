@@ -1,0 +1,10 @@
+{
+  "name": "mysql-literal",
+  "durationMs": 1215,
+  "files": 147,
+  "mysql2": true,
+  "canvas": false,
+  "worker": false,
+  "natives": [],
+  "warnings": 1
+}

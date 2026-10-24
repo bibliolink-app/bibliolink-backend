@@ -1,0 +1,6 @@
+{
+  "pdfLibraryPresent": true,
+  "workerPresent": false,
+  "canvasInFunction": false,
+  "render": "BLOCKED: canvas dependency absent from Function; refusing parent node_modules fallback"
+}

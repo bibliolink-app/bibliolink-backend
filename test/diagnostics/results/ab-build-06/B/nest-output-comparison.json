@@ -1,0 +1,17 @@
+{
+  "main.js": {
+    "nestBuild": "9db83ccc9f2af44741e89a1634ba945e5dac42f8a006e6b898836c4538679f6e",
+    "function": "9db83ccc9f2af44741e89a1634ba945e5dac42f8a006e6b898836c4538679f6e",
+    "identical": true
+  },
+  "auth/auth.service.js": {
+    "nestBuild": "c181830de4c3c411f601dca2258014fcf80c3cece9a239390893214abb2595a0",
+    "function": "c181830de4c3c411f601dca2258014fcf80c3cece9a239390893214abb2595a0",
+    "identical": true
+  },
+  "reading/content/processors/pdf/pdf-content-processor.service.js": {
+    "nestBuild": "32d4f54d3019e979232e154ab56ec9df825f507d504d78225c257898baefe757",
+    "function": "32d4f54d3019e979232e154ab56ec9df825f507d504d78225c257898baefe757",
+    "identical": true
+  }
+}

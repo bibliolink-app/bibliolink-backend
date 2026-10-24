@@ -1,0 +1,10 @@
+{
+  "name": "pdf-dynamic",
+  "durationMs": 766,
+  "files": 3,
+  "mysql2": false,
+  "canvas": false,
+  "worker": false,
+  "natives": [],
+  "warnings": 1
+}

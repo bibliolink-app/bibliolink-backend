@@ -1,0 +1,5 @@
+{
+  "mysql2": "node_modules\\.pnpm\\mysql2@3.24.3_@types+node@24.13.3\\node_modules\\mysql2\\index.js",
+  "canvas": "node_modules\\.pnpm\\@napi-rs+canvas@1.0.10\\node_modules\\@napi-rs\\canvas\\index.js",
+  "worker": true
+}

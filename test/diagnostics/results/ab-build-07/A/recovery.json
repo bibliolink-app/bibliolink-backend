@@ -1,0 +1,21 @@
+{
+  "status": "INCOMPLETE",
+  "processActive": false,
+  "processCheck": "OS command-line inspection: remaining Node processes belong to another project",
+  "exitCode": null,
+  "exitCodeReason": "No result.json or recoverable process handle; do not infer a code",
+  "startedAt": "2026-10-21T05:33:15.412Z",
+  "lastLogAt": "2026-10-21T05:54:47.801Z",
+  "lastObservedElapsedMs": 1292389,
+  "configuredTimeoutMs": 3600000,
+  "compilerCyclesStarted": 76,
+  "compilerCyclesCompleted": 75,
+  "outputConfigExists": false,
+  "functionConfigExists": false,
+  "nestDistMainSha256": "9db83ccc9f2af44741e89a1634ba945e5dac42f8a006e6b898836c4538679f6e",
+  "nestDistAuthSha256": "c181830de4c3c411f601dca2258014fcf80c3cece9a239390893214abb2595a0",
+  "nestDistAuthMetadata": "__metadata(\"design:paramtypes\", [nestjs_pino_1.PinoLogger,\n        jwt_1.JwtService,\n        users_service_1.UsersService,\n        password_hasher_service_1.PasswordHasherService,\n        captcha_service_1.CaptchaService,\n        email_service_1.EmailService,\n        typeorm_2.Repository])",
+  "artifactScope": "Recovered dist is nest build output, NOT a Vercel Function",
+  "identicalApplicationInputsToB": true,
+  "identicalProjectSettingsToB": true
+}

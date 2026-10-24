@@ -33,7 +33,7 @@ export class AuthCookieService {
         return {
             httpOnly: true,
             secure: envs.isProduction,
-            sameSite: 'lax',
+            sameSite: envs.isProduction ? 'none' : 'lax',
             path: cookies[kind].path,
         };
     }

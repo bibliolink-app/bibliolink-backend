@@ -1,0 +1,19 @@
+{
+  "variant": "A",
+  "code": 1,
+  "signal": null,
+  "durationMs": 16697,
+  "workspace": "C:\\Users\\jhonn\\AppData\\Local\\Temp\\bibliolink-vercel-A-zyzLFv",
+  "node": "v24.18.0",
+  "command": [
+    "node",
+    "C:\\Users\\jhonn\\AppData\\Local\\npm-cache\\_npx\\69f9afb961c37556\\node_modules\\vercel\\dist\\vc.js",
+    "build",
+    "--target",
+    "preview",
+    "--standalone",
+    "--global-config",
+    "<isolated>"
+  ],
+  "temporaryConfigRemoved": true
+}

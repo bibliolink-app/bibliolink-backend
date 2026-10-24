@@ -1,0 +1,116 @@
+{
+  "config": {
+    "version": 3,
+    "routes": [
+      {
+        "handle": "error"
+      },
+      {
+        "status": 404,
+        "src": "^(?!/api).*$",
+        "dest": "/404.html"
+      },
+      {
+        "handle": "filesystem"
+      },
+      {
+        "src": "/(.*)",
+        "dest": "/",
+        "transforms": [
+          {
+            "type": "request.path",
+            "op": "set",
+            "args": "/$1"
+          }
+        ]
+      }
+    ],
+    "crons": []
+  },
+  "functions": [
+    {
+      "configPath": "functions/index.func/.vc-config.json",
+      "configKeys": [
+        "handler",
+        "runtime",
+        "architecture",
+        "environment",
+        "framework",
+        "shouldDisableAutomaticFetchInstrumentation",
+        "launcherType",
+        "shouldAddHelpers",
+        "shouldAddSourcemapSupport",
+        "awsLambdaHandler"
+      ],
+      "config": {
+        "runtime": "nodejs24.x",
+        "handler": "dist/main.js",
+        "architecture": "x86_64",
+        "awsLambdaHandler": "",
+        "launcherType": "Nodejs",
+        "shouldAddHelpers": true,
+        "shouldAddSourcemapSupport": false,
+        "framework": {
+          "slug": "nestjs"
+        }
+      },
+      "handlerExists": true,
+      "fileCount": 2844,
+      "bytes": 12385592,
+      "packageManifestCount": 188,
+      "applicationJavaScriptFiles": 141,
+      "metadataCount": 85,
+      "auth": "dist/auth/auth.service.js",
+      "entities": [
+        "dist/ads/entities/ad-reward-challenge.entity.js",
+        "dist/auth/entities/password-reset-token.entity.js",
+        "dist/books/entities/book-author.entity.js",
+        "dist/books/entities/book-language.entity.js",
+        "dist/books/entities/book.entity.js",
+        "dist/books/entities/language.entity.js",
+        "dist/catalogs/entities/book-provider.entity.js",
+        "dist/categories/entities/book-category.entity.js",
+        "dist/categories/entities/category.entity.js",
+        "dist/favorites/entities/favorite.entity.js",
+        "dist/payment_transactions/entities/payment_transaction.entity.js",
+        "dist/reading/entities/reading-access.entity.js",
+        "dist/subscriptions/entities/subscription.entity.js",
+        "dist/users/entities/user.entity.js"
+      ],
+      "readingFiles": [
+        "dist/reading/content/constants/reading-content.constants.js",
+        "dist/reading/content/processors/epub/epub-archive.service.js",
+        "dist/reading/content/processors/epub/epub-content-processor.service.js",
+        "dist/reading/content/processors/html/html-content-processor.service.js",
+        "dist/reading/content/processors/pdf/pdf-content-processor.service.js",
+        "dist/reading/content/processors/text/text-content-processor.service.js",
+        "dist/reading/content/reading-content-fetcher.service.js",
+        "dist/reading/content/reading-content.module.js",
+        "dist/reading/content/reading-content.service.js",
+        "dist/reading/dto/redeem-rewarded-ad.dto.js",
+        "dist/reading/entities/reading-access.entity.js",
+        "dist/reading/enums/reading-content-type.enum.js",
+        "dist/reading/reading.controller.js",
+        "dist/reading/reading.module.js",
+        "dist/reading/reading.service.js"
+      ],
+      "pdfAssets": [
+        "node_modules/.pnpm/pdfjs-dist@6.4.299/node_modules/pdfjs-dist/legacy/build/pdf.mjs"
+      ],
+      "authMetadata": "__metadata(\"design:paramtypes\", [nestjs_pino_1.PinoLogger,\n        jwt_1.JwtService,\n        users_service_1.UsersService,\n        password_hasher_service_1.PasswordHasherService,\n        captcha_service_1.CaptchaService,\n        email_service_1.EmailService,\n        typeorm_2.Repository])",
+      "distMainPresent": true,
+      "srcMainPresent": false,
+      "nativeFiles": [
+        "node_modules/.pnpm/bcrypt@6.0.0/node_modules/bcrypt/prebuilds/win32-x64/bcrypt.node"
+      ],
+      "dynamicDependencies": {
+        "mysql2": false,
+        "@napi-rs/canvas": false
+      },
+      "sensitiveFilenames": [],
+      "missingApplicationImports": [],
+      "applicationImportsOutsideFunction": []
+    }
+  ],
+  "staticFiles": []
+}

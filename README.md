@@ -127,8 +127,10 @@ como `en`) para que coincidan con la tabla `languages`.
 - `GET /catalogs/search?query=&provider=&language=&page=&pageSize=` — busca en
   el proveedor indicado o, si se omite, en todos los que estén activos. La
   caída de una API no interrumpe la búsqueda: su código se informa en
-  `unavailableProviders`.
+  `unavailableProviders`. Solo devuelve obras que se leen dentro de BiblioLink
+  (ver [Obras visibles](#obras-visibles-solo-lo-que-se-lee-dentro-de-bibliolink)).
 - `GET /catalogs/providers/:providerCode/book?reference=` — detalle de una obra.
+  Responde `404` si la obra solo tiene una página externa.
 
 Parámetros de `search`:
 
@@ -335,7 +337,7 @@ mirando la extensión de la URL:
 | Gutendex | El tipo MIME de cada entrada de `formats` (`text/html` → `HTML`, `application/epub+zip` → `EPUB`, `text/plain` → `TEXT`, otro `text/*` → `UNSUPPORTED`). |
 | Standard Ebooks | El `type` del enlace OPDS (`application/epub+zip` → `EPUB`, `application/xhtml+xml` → `HTML`). Si solo queda la ficha pública, `EXTERNAL_PAGE`. |
 | arXiv | El enlace marcado `title="pdf"` o `type="application/pdf"` → `PDF`. La página de resumen (`/abs/`) → `EXTERNAL_PAGE`. |
-| OpenAlex | Solo `pdf_url` → `PDF`. La página de aterrizaje, `oa_url` (puede ser cualquier cosa) y el DOI → `EXTERNAL_PAGE`. Se prefiere un `pdf_url` antes que cualquier página. |
+| OpenAlex | Solo `pdf_url` → `PDF`, primero el de `primary_location` y si no el de cualquier otra entrada de `locations` (por ejemplo, la copia en arXiv). La página de aterrizaje, `oa_url` (puede ser cualquier cosa) y el DOI → `EXTERNAL_PAGE`. |
 
 `content_reference` y `content_format` son **internos**: no aparecen en
 `BookDetailResponseDto` ni en las respuestas de `catalogs`, que copian campo
@@ -347,6 +349,37 @@ usuario puede leer la obra y cómo entregarla. No tiene endpoint.
 Las obras importadas antes de la columna quedan con `NULL` hasta que se
 vuelvan a importar con `POST /books/import` (o una carga masiva), que
 actualiza enlace y formato juntos.
+
+### Obras visibles: solo lo que se lee dentro de BiblioLink
+
+BiblioLink es una biblioteca: el usuario lee la obra en la propia web, nunca
+se le redirige a otra página. Por eso una obra solo es **visible** si tiene
+`content_reference` y su formato es `PDF`, `EPUB`, `HTML` o `TEXT`. Las de
+formato `EXTERNAL_PAGE`, `UNSUPPORTED` o `NULL` (muchas obras científicas o
+educativas que solo tienen una ficha o un DOI) no aparecen en ninguna API:
+
+| Dónde | Qué pasa con una obra no visible |
+| --- | --- |
+| `GET /catalogs/search` | Se descarta de los resultados. OpenAlex además se consulta con el filtro `has_pdf_url:true`, para que sus páginas sigan llenas. |
+| `GET /catalogs/providers/:code/book` | `404` — "La obra no está disponible para leer en BiblioLink." |
+| `POST /books/import`, `POST /favorites/external` | No se guarda: `404`. |
+| Cargas masivas | Ni siquiera llega a importarse: la búsqueda que recorren ya la descartó. |
+| `GET /books`, `GET /books/:id` | No se lista; el detalle responde `404` igual que si no existiera. |
+| `GET /categories` y `GET /categories/:code/books` | No se lista ni se cuenta en `bookCount`. |
+| `POST /favorites` | `404`. |
+| `GET /favorites` y el límite del plan | Un favorito guardado antes del cambio sobre una obra hoy oculta no se muestra ni ocupa lugar. |
+| `reading` | Ya rechazaba esos formatos con `422`. |
+
+Las obras se **ocultan, no se borran**: las filas siguen en `books` (y sus
+favoritos y categorías también). Una obra con `NULL` vuelve a aparecer en
+cuanto se reimporta y el proveedor ofrece un PDF, EPUB, HTML o texto. La regla
+está en un solo lugar: `isReadableContent` en
+`src/catalogs/utils/book-content.util.ts` (en memoria) y
+`andWhereBookIsReadable` en `src/books/utils/readable-books.util.ts` (en SQL).
+
+En `catalogs`, `totalItems` es el total que informa el proveedor: en
+Gutendex, Standard Ebooks y arXiv puede incluir algunas obras que luego se
+descartan, así que una página puede traer menos elementos que `pageSize`.
 
 ### Cómo se guarda una obra
 

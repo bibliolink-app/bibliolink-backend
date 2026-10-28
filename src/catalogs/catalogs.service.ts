@@ -11,6 +11,7 @@ import { BookProviderCode } from './enums/book-provider-code.enum';
 import type { BookCatalogProvider } from './interfaces/book-catalog-provider.interface';
 import type { CatalogSearchResult } from './interfaces/catalog-search-result.interface';
 import type { ExternalBook, ExternalBookPage, } from './interfaces/external-book.interface';
+import { isReadableContent } from './utils/book-content.util';
 
 @Injectable()
 export class CatalogsService {
@@ -118,7 +119,19 @@ export class CatalogsService {
             const providerCode = providers[index]!.code;
 
             if (settledPage.status === 'fulfilled') {
-                results.push(settledPage.value);
+                // Solo se muestran obras que se leen dentro de BiblioLink: las
+                // que únicamente enlazan a una página externa se descartan.
+                const page = settledPage.value;
+                const readableItems = page.items.filter(isReadableContent);
+
+                if (readableItems.length < page.items.length) {
+                    this.logger.debug(
+                        { providerCode, hidden: page.items.length - readableItems.length },
+                        'Hidden catalog results that cannot be read in BiblioLink',
+                    );
+                }
+
+                results.push({ ...page, items: readableItems });
 
                 return;
             }
@@ -161,6 +174,14 @@ export class CatalogsService {
         if (!book) {
             throw new NotFoundException(
                 `El proveedor "${providerCode}" no tiene una obra con la referencia indicada.`,
+            );
+        }
+
+        // Una obra que no se puede leer dentro de BiblioLink se trata como
+        // inexistente: así tampoco se puede importar ni agregar a favoritos.
+        if (!isReadableContent(book)) {
+            throw new NotFoundException(
+                'La obra no está disponible para leer en BiblioLink.',
             );
         }
 

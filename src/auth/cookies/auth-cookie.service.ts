@@ -34,9 +34,8 @@ export class AuthCookieService {
 
         return {
             httpOnly: true,
-            // Los navegadores descartan las cookies `SameSite=None` sin `Secure`.
-            secure: envs.isProduction || sameSite === 'none',
-            sameSite,
+            secure: envs.isProduction,
+            sameSite: envs.isProduction ? 'none' : 'lax',
             path: cookies[kind].path,
         };
     }

@@ -1,0 +1,10 @@
+{
+  "name": "typeorm-dynamic",
+  "durationMs": 1718,
+  "files": 364,
+  "mysql2": false,
+  "canvas": false,
+  "worker": false,
+  "natives": [],
+  "warnings": 0
+}

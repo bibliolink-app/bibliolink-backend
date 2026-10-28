@@ -1,0 +1,12 @@
+{
+  "name": "pdf-explicit",
+  "durationMs": 2204,
+  "files": 13,
+  "mysql2": false,
+  "canvas": true,
+  "worker": true,
+  "natives": [
+    "node_modules/.pnpm/@napi-rs+canvas-win32-x64-msvc@1.0.10/node_modules/@napi-rs/canvas-win32-x64-msvc/skia.win32-x64-msvc.node"
+  ],
+  "warnings": 55
+}

@@ -4,7 +4,7 @@ import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { LoggerModule } from 'nestjs-pino';
 
-import { envs } from './config/envs';
+import { databaseConnectionOptions, databaseRetryOptions, } from './config/database.config';
 import { throttlingConfig } from './config/throttling.config';
 import { loggingConfig } from './config/logging.config';
 import { EmailModule } from './email/email.module';
@@ -19,21 +19,15 @@ import { ReadingModule } from './reading/reading.module';
 import { SeedModule } from './seed/seed.module';
 import { AnalyticsModule } from './analytics/analytics.module';
 import { CategoriesModule } from './categories/categories.module';
+import { HealthModule } from './health/health.module';
 
 @Module({
     imports: [
         LoggerModule.forRoot(loggingConfig),
         TypeOrmModule.forRoot({
-            type: envs.database.type,
-            host: envs.database.host,
-            port: envs.database.port,
-            username: envs.database.user,
-            password: envs.database.password,
-            database: envs.database.name,
-            synchronize: false,
+            ...databaseConnectionOptions,
+            ...databaseRetryOptions,
             autoLoadEntities: true,
-            timezone: 'Z',
-            dateStrings: false,
         }),
 
         ThrottlerModule.forRoot(throttlingConfig),
@@ -49,6 +43,7 @@ import { CategoriesModule } from './categories/categories.module';
         ReadingModule,
         AnalyticsModule,
         CategoriesModule,
+        HealthModule,
     ],
 
     providers: [

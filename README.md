@@ -70,6 +70,25 @@ Una fecha de nacimiento futura deberá evaluarse como regla de validez del
 registro cuando se implemente ese caso de uso. No hay una edad mínima o máxima
 definida en esta etapa.
 
+## Despliegue
+
+- `GET /` y `GET /health` responden `{ "status": "ok", … }` sin consultar la
+  base ni servicios externos (y sin throttling). Si no responden, la app no
+  arrancó: revisar variables de entorno y la conexión a MySQL.
+- Diagnóstico completo y correcciones para Vercel:
+  [docs/pruebas-integracion-despliegue.md](docs/pruebas-integracion-despliegue.md)
+  y [docs/correcciones-despliegue.md](docs/correcciones-despliegue.md).
+
+Variables opcionales relevantes para el despliegue:
+
+| Variable | Por omisión | Uso |
+| --- | --- | --- |
+| `DATABASE_SSL` | `false` | `true` si el MySQL exige TLS |
+| `DATABASE_POOL_SIZE` | `10` | Conexiones por instancia; en Vercel conviene 3–5 |
+| `DATABASE_CONNECT_RETRIES` | `2` | Reintentos de conexión al arrancar |
+| `AUTH_COOKIE_SAME_SITE` | `lax` | `none` si el frontend está en otro sitio (agrega `Secure`) |
+| `TRUST_PROXY_HOPS` | `1` en Vercel, `0` fuera | Proxies de los que se acepta `X-Forwarded-For` |
+
 ## Migraciones
 
 El esquema base se creó fuera del repositorio; a partir de
@@ -127,8 +146,10 @@ como `en`) para que coincidan con la tabla `languages`.
 - `GET /catalogs/search?query=&provider=&language=&page=&pageSize=` — busca en
   el proveedor indicado o, si se omite, en todos los que estén activos. La
   caída de una API no interrumpe la búsqueda: su código se informa en
-  `unavailableProviders`.
+  `unavailableProviders`. Solo devuelve obras que se leen dentro de BiblioLink
+  (ver [Obras visibles](#obras-visibles-solo-lo-que-se-lee-dentro-de-bibliolink)).
 - `GET /catalogs/providers/:providerCode/book?reference=` — detalle de una obra.
+  Responde `404` si la obra solo tiene una página externa.
 
 Parámetros de `search`:
 
@@ -335,7 +356,7 @@ mirando la extensión de la URL:
 | Gutendex | El tipo MIME de cada entrada de `formats` (`text/html` → `HTML`, `application/epub+zip` → `EPUB`, `text/plain` → `TEXT`, otro `text/*` → `UNSUPPORTED`). |
 | Standard Ebooks | El `type` del enlace OPDS (`application/epub+zip` → `EPUB`, `application/xhtml+xml` → `HTML`). Si solo queda la ficha pública, `EXTERNAL_PAGE`. |
 | arXiv | El enlace marcado `title="pdf"` o `type="application/pdf"` → `PDF`. La página de resumen (`/abs/`) → `EXTERNAL_PAGE`. |
-| OpenAlex | Solo `pdf_url` → `PDF`. La página de aterrizaje, `oa_url` (puede ser cualquier cosa) y el DOI → `EXTERNAL_PAGE`. Se prefiere un `pdf_url` antes que cualquier página. |
+| OpenAlex | Solo `pdf_url` → `PDF`, primero el de `primary_location` y si no el de cualquier otra entrada de `locations` (por ejemplo, la copia en arXiv). La página de aterrizaje, `oa_url` (puede ser cualquier cosa) y el DOI → `EXTERNAL_PAGE`. |
 
 `content_reference` y `content_format` son **internos**: no aparecen en
 `BookDetailResponseDto` ni en las respuestas de `catalogs`, que copian campo
@@ -347,6 +368,37 @@ usuario puede leer la obra y cómo entregarla. No tiene endpoint.
 Las obras importadas antes de la columna quedan con `NULL` hasta que se
 vuelvan a importar con `POST /books/import` (o una carga masiva), que
 actualiza enlace y formato juntos.
+
+### Obras visibles: solo lo que se lee dentro de BiblioLink
+
+BiblioLink es una biblioteca: el usuario lee la obra en la propia web, nunca
+se le redirige a otra página. Por eso una obra solo es **visible** si tiene
+`content_reference` y su formato es `PDF`, `EPUB`, `HTML` o `TEXT`. Las de
+formato `EXTERNAL_PAGE`, `UNSUPPORTED` o `NULL` (muchas obras científicas o
+educativas que solo tienen una ficha o un DOI) no aparecen en ninguna API:
+
+| Dónde | Qué pasa con una obra no visible |
+| --- | --- |
+| `GET /catalogs/search` | Se descarta de los resultados. OpenAlex además se consulta con el filtro `has_pdf_url:true`, para que sus páginas sigan llenas. |
+| `GET /catalogs/providers/:code/book` | `404` — "La obra no está disponible para leer en BiblioLink." |
+| `POST /books/import`, `POST /favorites/external` | No se guarda: `404`. |
+| Cargas masivas | Ni siquiera llega a importarse: la búsqueda que recorren ya la descartó. |
+| `GET /books`, `GET /books/:id` | No se lista; el detalle responde `404` igual que si no existiera. |
+| `GET /categories` y `GET /categories/:code/books` | No se lista ni se cuenta en `bookCount`. |
+| `POST /favorites` | `404`. |
+| `GET /favorites` y el límite del plan | Un favorito guardado antes del cambio sobre una obra hoy oculta no se muestra ni ocupa lugar. |
+| `reading` | Ya rechazaba esos formatos con `422`. |
+
+Las obras se **ocultan, no se borran**: las filas siguen en `books` (y sus
+favoritos y categorías también). Una obra con `NULL` vuelve a aparecer en
+cuanto se reimporta y el proveedor ofrece un PDF, EPUB, HTML o texto. La regla
+está en un solo lugar: `isReadableContent` en
+`src/catalogs/utils/book-content.util.ts` (en memoria) y
+`andWhereBookIsReadable` en `src/books/utils/readable-books.util.ts` (en SQL).
+
+En `catalogs`, `totalItems` es el total que informa el proveedor: en
+Gutendex, Standard Ebooks y arXiv puede incluir algunas obras que luego se
+descartan, así que una página puede traer menos elementos que `pageSize`.
 
 ### Cómo se guarda una obra
 
@@ -377,6 +429,14 @@ fila. La obra queda creada una sola vez y la importación que perdió responde
 
 ### Endpoints
 
+Las cuatro rutas de importación exigen sesión con rol `ADMIN` (401 sin
+sesión, 403 con `USER`): escriben en la base y una carga masiva puede ocupar
+la función hasta su tiempo máximo. Un usuario agrega obras con
+`POST /favorites/external`, que importa una sola obra si hace falta. La
+consulta (`GET /books`, `GET /books/:id`) es pública. En los ejemplos de
+abajo hay que enviar la cookie de sesión de un administrador
+(`-b "access_token=<token>"`).
+
 - `POST /books/import` — trae una obra puntual de un proveedor (mismos datos
   que devuelve `catalogs`) y la guarda. Body: `{ providerCode, externalReference }`.
 - `POST /books/import/search` — ejecuta una búsqueda en `catalogs` (mismo
@@ -398,6 +458,7 @@ fila. La obra queda creada una sola vez y la importación que perdió responde
 
 ```bash
 curl -X POST http://localhost:3000/books/import \
+  -b "access_token=<token-de-admin>" \
   -H "Content-Type: application/json" \
   -d '{"providerCode":"gutendex","externalReference":"345"}'
 ```
@@ -431,6 +492,7 @@ los metadatos actualizados.
 
 ```bash
 curl -X POST http://localhost:3000/books/import/search \
+  -b "access_token=<token-de-admin>" \
   -H "Content-Type: application/json" \
   -d '{"query":"dracula","pageSize":2}'
 ```
@@ -465,6 +527,7 @@ API no ofrece un endpoint de listado completo (solo búsqueda).
 
 ```bash
 curl -X POST http://localhost:3000/books/import/providers/standard-ebooks \
+  -b "access_token=<token-de-admin>" \
   -H "Content-Type: application/json" \
   -d '{"query":"shelley","pageSize":3,"maxPages":4}'
 ```
@@ -501,6 +564,7 @@ administrador lo apagó.
 
 ```bash
 curl -X POST http://localhost:3000/books/import/all \
+  -b "access_token=<token-de-admin>" \
   -H "Content-Type: application/json" \
   -d '{"query":"poe","pageSize":3,"maxPages":2}'
 ```
@@ -541,14 +605,10 @@ curl http://localhost:3000/books/1
 | Código | Cuándo ocurre |
 | --- | --- |
 | `400` | Body inválido: `providerCode` desconocido, referencia vacía, `maxPages`/`pageSize` fuera de rango, u otro parámetro fuera de rango. |
+| `401` | Importación sin sesión. |
+| `403` | Importación con un usuario que no es `ADMIN`. |
 | `404` | `GET /books/:id` con un id que no existe, o una importación (puntual o masiva de un proveedor) contra un proveedor desactivado o una referencia que no existe. |
 | `503` | El proveedor externo no respondió a tiempo durante una importación puntual. |
-
-Nota: por ahora estos endpoints no tienen guardias de autenticación, igual
-que el resto de `catalogs` y `books`. Antes de exponerlos en producción,
-`POST /books/import/search` en particular conviene restringirlo a un rol
-administrativo, ya que puede disparar varias llamadas a APIs externas por
-cada ejecución.
 
 ## Categorías (módulo `categories`)
 

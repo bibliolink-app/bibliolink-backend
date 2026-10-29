@@ -1,0 +1,14 @@
+{
+    "FAVORITE_USER_NOT_FOUND": "El usuario no existe.",
+    "FAVORITE_ALREADY_EXISTS": "El libro ya está en tus favoritos.",
+    "FAVORITE_NOT_FOUND": "El libro no está en tus favoritos.",
+    "FAVORITE_LIMIT_REACHED_FREE": "Alcanzaste el límite de {limit} favoritos del plan gratuito. Hazte Premium para guardar hasta {premiumLimit}.",
+    "FAVORITE_LIMIT_REACHED_PREMIUM": "Alcanzaste el límite de {limit} favoritos del plan Premium.",
+    "FAVORITE_PROGRESS_OUT_OF_RANGE": "El progreso debe estar entre {min} y {max}.",
+    "VALIDATION_PROGRESS_NUMBER": "El progreso debe ser un número.",
+    "VALIDATION_PROGRESS_MIN": "El progreso no puede ser menor que {min}.",
+    "VALIDATION_PROGRESS_MAX": "El progreso no puede ser mayor que {max}.",
+    "VALIDATION_READING_LOCATION_REQUIRED": "La posición de lectura es obligatoria.",
+    "VALIDATION_READING_LOCATION_STRING": "La posición de lectura debe ser un texto.",
+    "VALIDATION_READING_LOCATION_MAX_LENGTH": "La posición de lectura no puede superar los {max} caracteres."
+}

@@ -1,0 +1,14 @@
+{
+    "INTERNAL_ERROR": "Une erreur inattendue s'est produite.",
+    "REQUEST_INVALID": "La requête n'est pas valide.",
+    "REQUEST_BODY_TOO_LARGE": "Le corps de la requête dépasse la taille autorisée.",
+    "REQUEST_BODY_MALFORMED": "Le corps de la requête n'a pas un format valide.",
+    "REQUEST_ENCODING_UNSUPPORTED": "L'encodage du corps de la requête n'est pas pris en charge.",
+    "REQUEST_CHARSET_UNSUPPORTED": "Le jeu de caractères du corps de la requête n'est pas pris en charge.",
+    "VALIDATION_PROPERTY_NOT_ALLOWED": "Le champ « {property} » n'est pas autorisé.",
+    "VALIDATION_PAGE_INTEGER": "La page doit être un nombre entier.",
+    "VALIDATION_PAGE_MIN": "La page doit être supérieure ou égale à {min}.",
+    "VALIDATION_PAGE_SIZE_INTEGER": "La taille de page doit être un nombre entier.",
+    "VALIDATION_PAGE_SIZE_MIN": "La taille de page doit être supérieure ou égale à {min}.",
+    "VALIDATION_PAGE_SIZE_MAX": "La taille de page ne peut pas dépasser {max}."
+}

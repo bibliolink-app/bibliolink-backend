@@ -9,6 +9,7 @@ import { ImportBookDto } from '../books/dto/import-book.dto';
 import { Book } from '../books/entities/book.entity';
 import { andWhereBookIsReadable } from '../books/utils/readable-books.util';
 import { isMySqlUniqueViolation } from '../common/databases/is-mysql-unique-violation';
+import { localizedError, type LocalizedErrorBody } from '../i18n/localized-error';
 import { SubscriptionsService } from '../subscriptions/subscriptions.service';
 import { User } from '../users/entities/user.entity';
 import { FREE_FAVORITES_LIMIT, MAX_PROGRESS_PERCENT, MIN_PROGRESS_PERCENT, PREMIUM_FAVORITES_LIMIT, READING_LOCATION_MAX_LENGTH, } from './constants/favorites.constants';
@@ -103,7 +104,7 @@ export class FavoritesService {
                         .getOne();
 
                     if (!user) {
-                        throw new NotFoundException('El usuario no existe.');
+                        throw new NotFoundException(localizedError('FAVORITE_USER_NOT_FOUND'));
                     }
 
                     // Una obra que no se puede leer dentro de BiblioLink no se
@@ -117,7 +118,7 @@ export class FavoritesService {
                     ).getExists();
 
                     if (!bookExists) {
-                        throw new NotFoundException('El libro no existe.');
+                        throw new NotFoundException(localizedError('BOOK_NOT_FOUND'));
                     }
 
                     const favoriteRepository = manager.getRepository(Favorite);
@@ -128,7 +129,7 @@ export class FavoritesService {
 
                     if (alreadyFavorite) {
                         throw new ConflictException(
-                            'El libro ya está en tus favoritos.',
+                            localizedError('FAVORITE_ALREADY_EXISTS'),
                         );
                     }
 
@@ -153,7 +154,7 @@ export class FavoritesService {
                         );
 
                         throw new ForbiddenException(
-                            this.buildLimitMessage(quota),
+                            this.buildLimitError(quota),
                         );
                     }
 
@@ -173,7 +174,7 @@ export class FavoritesService {
             // Respaldo de `UQ_favorites_user_book` por si la verificación
             // anterior no alcanzara a detectar el duplicado.
             if (isMySqlUniqueViolation(error)) {
-                throw new ConflictException('El libro ya está en tus favoritos.');
+                throw new ConflictException(localizedError('FAVORITE_ALREADY_EXISTS'));
             }
 
             throw error;
@@ -208,7 +209,7 @@ export class FavoritesService {
         const result = await this.favoritesRepository.delete({ userId, bookId });
 
         if (!result.affected) {
-            throw new NotFoundException('El libro no está en tus favoritos.');
+            throw new NotFoundException(localizedError('FAVORITE_NOT_FOUND'));
         }
 
         this.logger.info({ userId, bookId }, 'Favorite removed successfully');
@@ -264,7 +265,10 @@ export class FavoritesService {
             progressPercent > MAX_PROGRESS_PERCENT
         ) {
             throw new BadRequestException(
-                `El progreso debe estar entre ${MIN_PROGRESS_PERCENT} y ${MAX_PROGRESS_PERCENT}.`,
+                localizedError('FAVORITE_PROGRESS_OUT_OF_RANGE', {
+                    min: MIN_PROGRESS_PERCENT,
+                    max: MAX_PROGRESS_PERCENT,
+                }),
             );
         }
 
@@ -273,7 +277,9 @@ export class FavoritesService {
             readingLocation.length > READING_LOCATION_MAX_LENGTH
         ) {
             throw new BadRequestException(
-                `La posición de lectura no puede superar los ${READING_LOCATION_MAX_LENGTH} caracteres.`,
+                localizedError('VALIDATION_READING_LOCATION_MAX_LENGTH', {
+                    max: READING_LOCATION_MAX_LENGTH,
+                }),
             );
         }
 
@@ -292,7 +298,7 @@ export class FavoritesService {
         );
 
         if (!result.affected) {
-            throw new NotFoundException('El libro no está en tus favoritos.');
+            throw new NotFoundException(localizedError('FAVORITE_NOT_FOUND'));
         }
 
         this.logger.info(
@@ -318,15 +324,15 @@ export class FavoritesService {
             : { plan: UserPlan.FREE, limit: FREE_FAVORITES_LIMIT };
     }
 
-    private buildLimitMessage(quota: FavoritesQuota): string {
+    private buildLimitError(quota: FavoritesQuota): LocalizedErrorBody {
         if (quota.plan === UserPlan.PREMIUM) {
-            return `Alcanzaste el límite de ${quota.limit} favoritos del plan Premium.`;
+            return localizedError('FAVORITE_LIMIT_REACHED_PREMIUM', { limit: quota.limit });
         }
 
-        return (
-            `Alcanzaste el límite de ${quota.limit} favoritos del plan gratuito. ` +
-            `Hazte Premium para guardar hasta ${PREMIUM_FAVORITES_LIMIT}.`
-        );
+        return localizedError('FAVORITE_LIMIT_REACHED_FREE', {
+            limit: quota.limit,
+            premiumLimit: PREMIUM_FAVORITES_LIMIT,
+        });
     }
 
     private toResponseDto(

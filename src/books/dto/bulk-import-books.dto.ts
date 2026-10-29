@@ -3,6 +3,7 @@ import { IsInt, IsOptional, IsString, Max, MaxLength, Min, } from 'class-validat
 
 import { CATALOG_MAX_PAGE_SIZE } from '../../catalogs/constants/catalogs.constants';
 import { trimString } from '../../common/transformers/trim-string.transformer';
+import { localizedValidation } from '../../i18n/localized-validation';
 import { BOOKS_BULK_IMPORT_HARD_MAX_PAGES } from '../constants/books.constants';
 
 // Parámetros opcionales de una carga masiva. Sin `query`, cada proveedor que
@@ -12,37 +13,32 @@ import { BOOKS_BULK_IMPORT_HARD_MAX_PAGES } from '../constants/books.constants';
 export class BulkImportBooksDto {
     @Transform(trimString)
     @IsOptional()
-    @IsString({ message: 'El término de búsqueda debe ser un texto.' })
-    @MaxLength(200, {
-        message: 'El término de búsqueda no puede superar los 200 caracteres.',
-    })
+    @IsString(localizedValidation('VALIDATION_SEARCH_QUERY_STRING'))
+    @MaxLength(200, localizedValidation('VALIDATION_SEARCH_QUERY_MAX_LENGTH', { max: 200 }))
     query?: string;
 
     @Transform(trimString)
     @IsOptional()
-    @IsString({ message: 'El idioma debe ser un texto.' })
-    @MaxLength(10, {
-        message: 'El idioma no puede superar los 10 caracteres.',
-    })
+    @IsString(localizedValidation('VALIDATION_LANGUAGE_STRING'))
+    @MaxLength(10, localizedValidation('VALIDATION_LANGUAGE_MAX_LENGTH', { max: 10 }))
     language?: string;
 
     @Type(() => Number)
     @IsOptional()
-    @IsInt({ message: 'El tamaño de página debe ser un número entero.' })
-    @Min(1, { message: 'El tamaño de página debe ser mayor o igual a 1.' })
-    @Max(CATALOG_MAX_PAGE_SIZE, {
-        message: `El tamaño de página no puede superar ${CATALOG_MAX_PAGE_SIZE}.`,
-    })
+    @IsInt(localizedValidation('VALIDATION_PAGE_SIZE_INTEGER'))
+    @Min(1, localizedValidation('VALIDATION_PAGE_SIZE_MIN', { min: 1 }))
+    @Max(CATALOG_MAX_PAGE_SIZE, localizedValidation('VALIDATION_PAGE_SIZE_MAX', { max: CATALOG_MAX_PAGE_SIZE }))
     pageSize?: number;
 
     // Cuántas páginas recorrer como máximo antes de detenerse, aunque el
     // proveedor todavía tenga más resultados.
     @Type(() => Number)
     @IsOptional()
-    @IsInt({ message: 'El límite de páginas debe ser un número entero.' })
-    @Min(1, { message: 'El límite de páginas debe ser mayor o igual a 1.' })
-    @Max(BOOKS_BULK_IMPORT_HARD_MAX_PAGES, {
-        message: `El límite de páginas no puede superar ${BOOKS_BULK_IMPORT_HARD_MAX_PAGES}.`,
-    })
+    @IsInt(localizedValidation('VALIDATION_MAX_PAGES_INTEGER'))
+    @Min(1, localizedValidation('VALIDATION_MAX_PAGES_MIN', { min: 1 }))
+    @Max(
+        BOOKS_BULK_IMPORT_HARD_MAX_PAGES,
+        localizedValidation('VALIDATION_MAX_PAGES_MAX', { max: BOOKS_BULK_IMPORT_HARD_MAX_PAGES }),
+    )
     maxPages?: number;
 }

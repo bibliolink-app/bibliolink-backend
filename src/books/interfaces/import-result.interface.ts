@@ -1,4 +1,5 @@
 import type { BookProviderCode } from '../../catalogs/enums/book-provider-code.enum';
+import type { MessageCode } from '../../i18n/messages';
 
 // Registra el resultado de importar una obra puntual desde un proveedor.
 export interface ImportedBookSummary {
@@ -22,6 +23,11 @@ export interface FailedImportSummary {
     externalReference: string;
 
     title: string;
+
+    // Código del motivo (ver `src/i18n/`). `reason` es su texto: el
+    // servicio lo deja en el idioma por omisión y el controller lo traduce
+    // al idioma de la petición.
+    code: MessageCode;
 
     reason: string;
 }

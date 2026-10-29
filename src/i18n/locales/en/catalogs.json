@@ -1,0 +1,16 @@
+{
+    "CATALOG_PROVIDER_NOT_SUPPORTED": "The provider \"{providerCode}\" is not supported.",
+    "CATALOG_PROVIDER_DISABLED": "The provider \"{providerCode}\" is disabled.",
+    "CATALOG_PROVIDER_NOT_REGISTERED": "The provider \"{providerCode}\" is not registered. Run the providers seed.",
+    "CATALOG_PROVIDER_UNAVAILABLE": "The content provider \"{providerCode}\" is not available right now.",
+    "CATALOG_BOOK_NOT_FOUND": "The provider \"{providerCode}\" has no work with the given reference.",
+    "CATALOG_BOOK_NOT_READABLE": "This work is not available to read in BiblioLink.",
+    "VALIDATION_PROVIDER_INVALID": "The given provider is not supported.",
+    "VALIDATION_REFERENCE_STRING": "The reference must be text.",
+    "VALIDATION_REFERENCE_REQUIRED": "The reference is required.",
+    "VALIDATION_REFERENCE_MAX_LENGTH": "The reference cannot exceed {max} characters.",
+    "VALIDATION_SEARCH_QUERY_STRING": "The search term must be text.",
+    "VALIDATION_SEARCH_QUERY_MAX_LENGTH": "The search term cannot exceed {max} characters.",
+    "VALIDATION_LANGUAGE_STRING": "The language must be text.",
+    "VALIDATION_LANGUAGE_MAX_LENGTH": "The language cannot exceed {max} characters."
+}

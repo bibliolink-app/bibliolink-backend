@@ -7,6 +7,7 @@ import { BooksService } from '../books/books.service';
 import { Book } from '../books/entities/book.entity';
 import { READABLE_BOOK_PARAMETERS, readableBookCondition, } from '../books/utils/readable-books.util';
 import { BookCategoryCode } from '../catalogs/enums/book-category-code.enum';
+import { localizedError } from '../i18n/localized-error';
 import { CategoryBooksResponseDto } from './dto/category-books-response.dto';
 import { CategoryResponseDto } from './dto/category-response.dto';
 import { FindCategoryBooksDto } from './dto/find-category-books.dto';
@@ -77,7 +78,7 @@ export class CategoriesService {
         // El código es válido (lo comprueba el controller), pero la fila no
         // existe: falta correr la migración de la taxonomía.
         if (!category) {
-            throw new NotFoundException('La categoría no existe.');
+            throw new NotFoundException(localizedError('CATEGORY_NOT_FOUND'));
         }
 
         const { page, pageSize } = findCategoryBooksDto;

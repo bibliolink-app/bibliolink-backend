@@ -1,6 +1,7 @@
 import { Injectable, ServiceUnavailableException } from '@nestjs/common';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 
+import { localizedError } from '../../i18n/localized-error';
 import { CATALOG_REQUEST_TIMEOUT_MS, CATALOG_USER_AGENT, } from '../constants/catalogs.constants';
 
 interface CatalogRequestOptions {
@@ -101,7 +102,7 @@ export class CatalogHttpService {
         providerCode: string,
     ): ServiceUnavailableException {
         return new ServiceUnavailableException(
-            `El proveedor de contenido "${providerCode}" no está disponible en este momento.`,
+            localizedError('CATALOG_PROVIDER_UNAVAILABLE', { providerCode }),
         );
     }
 }

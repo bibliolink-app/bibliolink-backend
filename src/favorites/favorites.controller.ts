@@ -1,9 +1,11 @@
-import { Body, Controller, Delete, Get, HttpCode, HttpStatus, NotFoundException, Param, ParseIntPipe, Patch, Post, UseGuards, } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, HttpStatus, NotFoundException, Param, Patch, Post, UseGuards, } from '@nestjs/common';
 
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import type { AuthenticatedUser } from '../auth/interfaces/authenticated-user.interface';
 import { ImportBookDto } from '../books/dto/import-book.dto';
+import { localizedError } from '../i18n/localized-error';
+import { localizedParseIntPipe } from '../i18n/localized-pipes';
 import { CreateFavoriteDto } from './dto/create-favorite.dto';
 import { FavoriteResponseDto } from './dto/favorite-response.dto';
 import { FavoritesListResponseDto } from './dto/favorites-list-response.dto';
@@ -57,7 +59,7 @@ export class FavoritesController {
     @Get('books/:bookId/progress')
     async findReadingState(
         @CurrentUser() currentUser: AuthenticatedUser,
-        @Param('bookId', ParseIntPipe) bookId: number,
+        @Param('bookId', localizedParseIntPipe('VALIDATION_BOOK_ID_INTEGER')) bookId: number,
     ): Promise<ReadingStateResponseDto> {
         const readingState = await this.favoritesService.findReadingState(
             currentUser.userId,
@@ -65,7 +67,7 @@ export class FavoritesController {
         );
 
         if (!readingState) {
-            throw new NotFoundException('El libro no está en tus favoritos.');
+            throw new NotFoundException(localizedError('FAVORITE_NOT_FOUND'));
         }
 
         return readingState;
@@ -75,7 +77,7 @@ export class FavoritesController {
     @Patch('books/:bookId/progress')
     updateReadingProgress(
         @CurrentUser() currentUser: AuthenticatedUser,
-        @Param('bookId', ParseIntPipe) bookId: number,
+        @Param('bookId', localizedParseIntPipe('VALIDATION_BOOK_ID_INTEGER')) bookId: number,
         @Body() updateReadingProgressDto: UpdateReadingProgressDto,
     ): Promise<ReadingStateResponseDto> {
         return this.favoritesService.updateReadingProgress(
@@ -91,7 +93,7 @@ export class FavoritesController {
     @HttpCode(HttpStatus.NO_CONTENT)
     removeFavorite(
         @CurrentUser() currentUser: AuthenticatedUser,
-        @Param('bookId', ParseIntPipe) bookId: number,
+        @Param('bookId', localizedParseIntPipe('VALIDATION_BOOK_ID_INTEGER')) bookId: number,
     ): Promise<void> {
         return this.favoritesService.removeFavorite(currentUser.userId, bookId);
     }

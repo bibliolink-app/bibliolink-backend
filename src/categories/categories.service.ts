@@ -4,8 +4,6 @@ import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { Repository } from 'typeorm';
 
 import { BooksService } from '../books/books.service';
-import { Book } from '../books/entities/book.entity';
-import { READABLE_BOOK_PARAMETERS, readableBookCondition, } from '../books/utils/readable-books.util';
 import { BookCategoryCode } from '../catalogs/enums/book-category-code.enum';
 import { CategoryBooksResponseDto } from './dto/category-books-response.dto';
 import { CategoryResponseDto } from './dto/category-response.dto';
@@ -36,19 +34,10 @@ export class CategoriesService {
                 'bookCategory',
                 'bookCategory.category_id = category.category_id',
             )
-            // Solo cuentan las obras visibles (las que se leen dentro de
-            // BiblioLink), para que el número coincida con
-            // `GET /categories/:code/books`.
-            .leftJoin(
-                Book,
-                'book',
-                `book.bookId = bookCategory.bookId AND ${readableBookCondition('book')}`,
-                READABLE_BOOK_PARAMETERS,
-            )
             .select('category.category_id', 'categoryId')
             .addSelect('category.code', 'code')
             .addSelect('category.name', 'name')
-            .addSelect('COUNT(book.book_id)', 'bookCount')
+            .addSelect('COUNT(bookCategory.book_id)', 'bookCount')
             .groupBy('category.category_id')
             .orderBy('bookCount', 'DESC')
             .addOrderBy('category.name', 'ASC')

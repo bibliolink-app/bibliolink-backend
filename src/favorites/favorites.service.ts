@@ -7,7 +7,6 @@ import { BooksService } from '../books/books.service';
 import { BookDetailResponseDto } from '../books/dto/book-detail-response.dto';
 import { ImportBookDto } from '../books/dto/import-book.dto';
 import { Book } from '../books/entities/book.entity';
-import { andWhereBookIsReadable } from '../books/utils/readable-books.util';
 import { isMySqlUniqueViolation } from '../common/databases/is-mysql-unique-violation';
 import { SubscriptionsService } from '../subscriptions/subscriptions.service';
 import { User } from '../users/entities/user.entity';
@@ -62,16 +61,16 @@ export class FavoritesService {
         const items = favorites.flatMap((favorite) => {
             const book = booksById.get(favorite.bookId);
 
-            // Falta cuando la obra ya no se puede leer dentro de BiblioLink
-            // (o se borró entre ambas consultas): no se muestra ni se cuenta.
+            // La FK con borrado en cascada impide que falte la obra; se
+            // descarta igual por si se borró entre ambas consultas.
             return book ? [this.toResponseDto(favorite, book)] : [];
         });
 
         return {
             plan: quota.plan,
             limit: quota.limit,
-            count: items.length,
-            remaining: Math.max(0, quota.limit - items.length),
+            count: favorites.length,
+            remaining: Math.max(0, quota.limit - favorites.length),
             items,
         };
     }
@@ -106,15 +105,9 @@ export class FavoritesService {
                         throw new NotFoundException('El usuario no existe.');
                     }
 
-                    // Una obra que no se puede leer dentro de BiblioLink no se
-                    // puede agregar: responde igual que una inexistente.
-                    const bookExists = await andWhereBookIsReadable(
-                        manager
-                            .getRepository(Book)
-                            .createQueryBuilder('book')
-                            .where('book.bookId = :bookId', { bookId }),
-                        'book',
-                    ).getExists();
+                    const bookExists = await manager
+                        .getRepository(Book)
+                        .exists({ where: { bookId } });
 
                     if (!bookExists) {
                         throw new NotFoundException('El libro no existe.');
@@ -132,16 +125,9 @@ export class FavoritesService {
                         );
                     }
 
-                    // Solo cuentan los favoritos visibles, igual que en
-                    // `findAllForUser`: un favorito de una obra oculta no
-                    // debe ocupar un lugar que el usuario no puede ver ni liberar.
-                    const favoritesCount = await andWhereBookIsReadable(
-                        favoriteRepository
-                            .createQueryBuilder('favorite')
-                            .innerJoin(Book, 'book', 'book.bookId = favorite.bookId')
-                            .where('favorite.userId = :userId', { userId }),
-                        'book',
-                    ).getCount();
+                    const favoritesCount = await favoriteRepository.count({
+                        where: { userId },
+                    });
 
                     // Con `>=` también se bloquea a quien dejó de ser Premium
                     // y conserva más favoritos que el límite gratuito: no se le

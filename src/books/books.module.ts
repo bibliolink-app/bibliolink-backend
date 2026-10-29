@@ -1,8 +1,6 @@
 import { Module } from '@nestjs/common';
-import { PassportModule } from '@nestjs/passport';
 import { TypeOrmModule } from '@nestjs/typeorm';
 
-import { AuthModule } from '../auth/auth.module';
 import { CatalogsModule } from '../catalogs/catalogs.module';
 import { BookCategory } from '../categories/entities/book-category.entity';
 import { Category } from '../categories/entities/category.entity';
@@ -19,10 +17,6 @@ import { Language } from './entities/language.entity';
         // Aporta `CatalogsService`: es la fuente de las obras externas que
         // este módulo persiste, y quien resuelve el `provider_id` de cada una.
         CatalogsModule,
-        // Guards de las importaciones (solo administradores). `JwtAuthGuard`
-        // necesita las opciones de Passport registradas en este módulo.
-        AuthModule,
-        PassportModule.register({ session: false }),
     ],
     controllers: [BooksController],
     providers: [BooksService],

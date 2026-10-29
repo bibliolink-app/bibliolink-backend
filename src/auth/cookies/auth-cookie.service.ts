@@ -30,8 +30,6 @@ export class AuthCookieService {
     }
 
     private options(kind: keyof typeof cookies): CookieOptions {
-        const sameSite = envs.cookies.sameSite;
-
         return {
             httpOnly: true,
             secure: envs.isProduction,

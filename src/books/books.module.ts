@@ -1,6 +1,9 @@
+
 import { Module } from '@nestjs/common';
+import { PassportModule } from '@nestjs/passport';
 import { TypeOrmModule } from '@nestjs/typeorm';
 
+import { AuthModule } from '../auth/auth.module';
 import { CatalogsModule } from '../catalogs/catalogs.module';
 import { BookCategory } from '../categories/entities/book-category.entity';
 import { Category } from '../categories/entities/category.entity';
@@ -13,13 +16,20 @@ import { Language } from './entities/language.entity';
 
 @Module({
     imports: [
-        TypeOrmModule.forFeature([Book, BookAuthor, BookLanguage, Language, Category, BookCategory]),
-        // Aporta `CatalogsService`: es la fuente de las obras externas que
-        // este módulo persiste, y quien resuelve el `provider_id` de cada una.
+        TypeOrmModule.forFeature([
+            Book,
+            BookAuthor,
+            BookLanguage,
+            Language,
+            Category,
+            BookCategory,
+        ]),
         CatalogsModule,
+        AuthModule,
+        PassportModule.register({ session: false }),
     ],
     controllers: [BooksController],
     providers: [BooksService],
     exports: [BooksService],
 })
-export class BooksModule { }
+export class BooksModule {}

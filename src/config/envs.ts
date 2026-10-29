@@ -7,6 +7,7 @@ interface EnvVars {
     NODE_ENV: 'development' | 'production' | 'test';
     PORT: number;
     FRONTEND_URL: string;
+    TRUST_PROXY_HOPS: number;
 
     // DATABASE
     DATABASE_TYPE: 'mysql';
@@ -15,6 +16,9 @@ interface EnvVars {
     DATABASE_USER: string;
     DATABASE_PASSWORD: string;
     DATABASE_NAME: string;
+    DATABASE_SSL: boolean;
+    DATABASE_POOL_SIZE: number;
+    DATABASE_CONNECT_RETRIES: number;
 
     // PASSWORD HASHING
     PASSWORD_HASH_ROUNDS: number;
@@ -28,6 +32,7 @@ interface EnvVars {
 
     AUTH_COOKIE_MAX_AGE: number;
     REFRESH_COOKIE_MAX_AGE: number;
+    AUTH_COOKIE_SAME_SITE: 'lax' | 'strict' | 'none';
 
     // EMAIL / BREVO
     BREVO_API_KEY: string;
@@ -79,6 +84,10 @@ const envsSchema = joi.object<EnvVars>({
     NODE_ENV: joi.string().valid('development', 'production', 'test').default('development'),
     PORT: joi.number().port().default(3000),
     FRONTEND_URL: joi.string().uri().required(),
+    // Proxies delante de la app cuya cabecera X-Forwarded-For se acepta para
+    // obtener la IP del cliente (la usa el throttling). Vercel define VERCEL=1
+    // y pone un proxy propio que reescribe esa cabecera; fuera de Vercel, 0.
+    TRUST_PROXY_HOPS: joi.number().integer().min(0).max(5).default(process.env.VERCEL ? 1 : 0),
 
     // DATABASE
     DATABASE_TYPE: joi.string().valid('mysql').required(),
@@ -87,6 +96,13 @@ const envsSchema = joi.object<EnvVars>({
     DATABASE_USER: joi.string().required(),
     DATABASE_PASSWORD: joi.string().required(),
     DATABASE_NAME: joi.string().required(),
+    // La mayoría de los MySQL en la nube exige conexión cifrada.
+    DATABASE_SSL: joi.boolean().default(false),
+    // Conexiones máximas por instancia. En Vercel cada instancia abre las suyas.
+    DATABASE_POOL_SIZE: joi.number().integer().min(1).max(50).default(10),
+    // Reintentos al arrancar si la base no responde. Pocos, para fallar rápido
+    // y que el error se vea en los logs en vez de colgar cada arranque.
+    DATABASE_CONNECT_RETRIES: joi.number().integer().min(0).max(10).default(2),
 
     // PASSWORD HASHING
     PASSWORD_HASH_ROUNDS: joi.number().integer().min(10).max(15).default(10),
@@ -100,6 +116,10 @@ const envsSchema = joi.object<EnvVars>({
 
     AUTH_COOKIE_MAX_AGE: joi.number().integer().positive().required(),
     REFRESH_COOKIE_MAX_AGE: joi.number().integer().positive().required(),
+    // `none` cuando el frontend está en otro sitio (por ejemplo, otro
+    // subdominio de vercel.app): con `lax` el navegador no envía la cookie en
+    // las peticiones `fetch` entre sitios.
+    AUTH_COOKIE_SAME_SITE: joi.string().valid('lax', 'strict', 'none').default('lax'),
 
     // EMAIL / BREVO
     BREVO_API_KEY: joi.string().required(),
@@ -162,6 +182,7 @@ export const envs = {
     nodeEnv: envVars.NODE_ENV,
     port: envVars.PORT,
     frontendUrl: envVars.FRONTEND_URL,
+    trustProxyHops: envVars.TRUST_PROXY_HOPS,
     isProduction: envVars.NODE_ENV === 'production',
 
     // DATABASE
@@ -172,6 +193,9 @@ export const envs = {
         user: envVars.DATABASE_USER,
         password: envVars.DATABASE_PASSWORD,
         name: envVars.DATABASE_NAME,
+        ssl: envVars.DATABASE_SSL,
+        poolSize: envVars.DATABASE_POOL_SIZE,
+        connectRetries: envVars.DATABASE_CONNECT_RETRIES,
     },
 
     // PASSWORD HASHING
@@ -194,6 +218,7 @@ export const envs = {
     cookies: {
         authMaxAge: envVars.AUTH_COOKIE_MAX_AGE,
         refreshMaxAge: envVars.REFRESH_COOKIE_MAX_AGE,
+        sameSite: envVars.AUTH_COOKIE_SAME_SITE,
     },
 
     // EMAIL

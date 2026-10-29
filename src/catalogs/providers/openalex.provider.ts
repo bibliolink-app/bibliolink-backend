@@ -47,8 +47,6 @@ interface OpenAlexWork {
     };
     primary_location?: OpenAlexLocation | null;
     best_oa_location?: OpenAlexLocation | null;
-    // Todas las ubicaciones conocidas del trabajo (repositorios, editorial…).
-    locations?: OpenAlexLocation[] | null;
     // Tema principal del trabajo, con su campo y subcampo.
     primary_topic?: OpenAlexPrimaryTopic | null;
 }
@@ -80,16 +78,9 @@ export class OpenAlexProvider implements BookCatalogProvider {
             url.searchParams.set('search', criteria.query);
         }
 
-        // Solo trabajos con un PDF accesible: sin este filtro unos dos tercios
-        // de los resultados son páginas externas (no se pueden leer en
-        // BiblioLink), y al descartarlos las páginas quedarían casi vacías.
-        const filters = ['has_pdf_url:true'];
-
         if (criteria.language) {
-            filters.push(`language:${criteria.language}`);
+            url.searchParams.set('filter', `language:${criteria.language}`);
         }
-
-        url.searchParams.set('filter', filters.join(','));
 
         url.searchParams.set('per_page', String(criteria.pageSize));
         url.searchParams.set('page', String(criteria.page));
@@ -236,11 +227,6 @@ export class OpenAlexProvider implements BookCatalogProvider {
         const candidates: readonly [unknown, BookContentFormat][] = [
             [work.best_oa_location?.pdf_url, BookContentFormat.PDF],
             [work.primary_location?.pdf_url, BookContentFormat.PDF],
-            // A veces el único PDF está en otra ubicación (por ejemplo, un
-            // repositorio institucional); el filtro `has_pdf_url` las cuenta.
-            ...(work.locations ?? []).map(
-                (location): [unknown, BookContentFormat] => [location.pdf_url, BookContentFormat.PDF],
-            ),
             [work.best_oa_location?.landing_page_url, BookContentFormat.EXTERNAL_PAGE],
             [work.open_access?.oa_url, BookContentFormat.EXTERNAL_PAGE],
             [work.primary_location?.landing_page_url, BookContentFormat.EXTERNAL_PAGE],

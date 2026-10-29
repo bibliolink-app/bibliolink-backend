@@ -40,12 +40,7 @@ export class RefreshJwtStrategy extends PassportStrategy(
             !('sub' in payload) ||
             typeof payload.sub !== 'string' ||
             !/^[1-9]\d*$/.test(payload.sub) ||
-            !Number.isSafeInteger(Number(payload.sub)) ||
-            // passport-jwt solo comprueba la expiración si el token la trae:
-            // uno firmado sin `exp` sería válido para siempre.
-            !('exp' in payload) ||
-            typeof payload.exp !== 'number' ||
-            !Number.isFinite(payload.exp)
+            !Number.isSafeInteger(Number(payload.sub))
         ) {
             throw new UnauthorizedException();
         }

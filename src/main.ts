@@ -1,6 +1,5 @@
 import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
-import type { NestExpressApplication } from '@nestjs/platform-express';
 import cookieParser from 'cookie-parser';
 import { Logger } from 'nestjs-pino';
 
@@ -9,12 +8,7 @@ import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { envs } from './config/envs';
 
 async function bootstrap(): Promise<void> {
-    const app = await NestFactory.create<NestExpressApplication>(AppModule, { bufferLogs: true, rawBody: true, });
-
-    // Detrás de un proxy (Vercel), la IP del socket es la del proxy y todos los
-    // clientes compartirían el mismo contador de throttling. Con esto Express
-    // toma la IP del cliente de X-Forwarded-For, solo desde los proxies indicados.
-    app.set('trust proxy', envs.trustProxyHops);
+    const app = await NestFactory.create(AppModule, { bufferLogs: true, rawBody: true, });
     app.useLogger(app.get(Logger));
     app.use(cookieParser());
 

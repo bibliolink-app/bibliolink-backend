@@ -1,0 +1,9 @@
+{
+    "BOOK_NOT_FOUND": "Le livre n'existe pas.",
+    "BOOK_IMPORT_FAILED": "L'œuvre n'a pas pu être enregistrée. Consultez les journaux du serveur.",
+    "VALIDATION_BOOK_ID_INTEGER": "L'identifiant du livre doit être un nombre entier.",
+    "VALIDATION_BOOK_ID_MIN": "L'identifiant du livre doit être supérieur ou égal à {min}.",
+    "VALIDATION_MAX_PAGES_INTEGER": "La limite de pages doit être un nombre entier.",
+    "VALIDATION_MAX_PAGES_MIN": "La limite de pages doit être supérieure ou égale à {min}.",
+    "VALIDATION_MAX_PAGES_MAX": "La limite de pages ne peut pas dépasser {max}."
+}

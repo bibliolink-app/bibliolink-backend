@@ -1,0 +1,9 @@
+{
+    "BOOK_NOT_FOUND": "El libro no existe.",
+    "BOOK_IMPORT_FAILED": "No se pudo guardar la obra. Revise los registros del servidor.",
+    "VALIDATION_BOOK_ID_INTEGER": "El identificador del libro debe ser un número entero.",
+    "VALIDATION_BOOK_ID_MIN": "El identificador del libro debe ser mayor o igual a {min}.",
+    "VALIDATION_MAX_PAGES_INTEGER": "El límite de páginas debe ser un número entero.",
+    "VALIDATION_MAX_PAGES_MIN": "El límite de páginas debe ser mayor o igual a {min}.",
+    "VALIDATION_MAX_PAGES_MAX": "El límite de páginas no puede superar {max}."
+}

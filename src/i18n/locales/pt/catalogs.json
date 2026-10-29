@@ -1,0 +1,16 @@
+{
+    "CATALOG_PROVIDER_NOT_SUPPORTED": "O provedor \"{providerCode}\" não é suportado.",
+    "CATALOG_PROVIDER_DISABLED": "O provedor \"{providerCode}\" está desativado.",
+    "CATALOG_PROVIDER_NOT_REGISTERED": "O provedor \"{providerCode}\" não está registrado. Execute o seed de provedores.",
+    "CATALOG_PROVIDER_UNAVAILABLE": "O provedor de conteúdo \"{providerCode}\" não está disponível no momento.",
+    "CATALOG_BOOK_NOT_FOUND": "O provedor \"{providerCode}\" não tem uma obra com a referência indicada.",
+    "CATALOG_BOOK_NOT_READABLE": "A obra não está disponível para leitura no BiblioLink.",
+    "VALIDATION_PROVIDER_INVALID": "O provedor indicado não é suportado.",
+    "VALIDATION_REFERENCE_STRING": "A referência deve ser um texto.",
+    "VALIDATION_REFERENCE_REQUIRED": "A referência é obrigatória.",
+    "VALIDATION_REFERENCE_MAX_LENGTH": "A referência não pode ter mais de {max} caracteres.",
+    "VALIDATION_SEARCH_QUERY_STRING": "O termo de busca deve ser um texto.",
+    "VALIDATION_SEARCH_QUERY_MAX_LENGTH": "O termo de busca não pode ter mais de {max} caracteres.",
+    "VALIDATION_LANGUAGE_STRING": "O idioma deve ser um texto.",
+    "VALIDATION_LANGUAGE_MAX_LENGTH": "O idioma não pode ter mais de {max} caracteres."
+}

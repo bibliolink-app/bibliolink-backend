@@ -15,6 +15,25 @@ export const NO_BOOK_CONTENT: BookContent = {
     contentFormat: null,
 };
 
+// Formatos que Reading puede mostrar dentro de BiblioLink. Una obra con otro
+// formato (`EXTERNAL_PAGE`, `UNSUPPORTED`) o sin contenido solo se podría leer
+// saliendo de la página, así que no se muestra en búsquedas ni listados.
+export const READABLE_CONTENT_FORMATS: readonly BookContentFormat[] = [
+    BookContentFormat.PDF,
+    BookContentFormat.EPUB,
+    BookContentFormat.HTML,
+    BookContentFormat.TEXT,
+];
+
+// Indica si la obra se puede leer dentro de BiblioLink.
+export function isReadableContent(content: BookContent): boolean {
+    return (
+        content.contentReference !== null &&
+        content.contentFormat !== null &&
+        READABLE_CONTENT_FORMATS.includes(content.contentFormat)
+    );
+}
+
 // Arma el par enlace + formato. Si la URL no es válida no se conserva el
 // formato: un formato sin enlace no describiría nada.
 export function toBookContent(

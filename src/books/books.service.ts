@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, UnprocessableEntityException, } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { In, Repository } from 'typeorm';
@@ -9,6 +9,7 @@ import { SearchCatalogDto } from '../catalogs/dto/search-catalog.dto';
 import { BookCategoryCode } from '../catalogs/enums/book-category-code.enum';
 import { BookProviderCode } from '../catalogs/enums/book-provider-code.enum';
 import type { ExternalBook } from '../catalogs/interfaces/external-book.interface';
+import { isReadableContent } from '../catalogs/utils/book-content.util';
 import { BookCategory } from '../categories/entities/book-category.entity';
 import { Category } from '../categories/entities/category.entity';
 import { isMySqlUniqueViolation } from '../common/databases/is-mysql-unique-violation';
@@ -26,6 +27,7 @@ import { BookLanguage } from './entities/book-language.entity';
 import { Book } from './entities/book.entity';
 import { Language } from './entities/language.entity';
 import type { BookReadingSource } from './interfaces/book-reading-source.interface';
+import { andWhereBookIsReadable } from './utils/readable-books.util';
 import type { BulkImportResult, FailedImportSummary, ImportedBookSummary, ImportSearchResult, } from './interfaces/import-result.interface';
 
 // Resultado interno de guardar una obra externa en `books`.
@@ -76,9 +78,7 @@ export class BooksService {
     async findAll(): Promise<BookDetailResponseDto[]> {
         this.logger.debug({ operation: 'findAll' }, 'Listing books');
 
-        const books = await this.booksRepository
-            .createQueryBuilder('book')
-            .leftJoinAndSelect('book.provider', 'provider')
+        const books = await this.visibleBooksQuery()
             .orderBy('book.title', 'ASC')
             .getMany();
 
@@ -92,10 +92,8 @@ export class BooksService {
             return [];
         }
 
-        const books = await this.booksRepository
-            .createQueryBuilder('book')
-            .leftJoinAndSelect('book.provider', 'provider')
-            .where('book.bookId IN (:...bookIds)', { bookIds })
+        const books = await this.visibleBooksQuery()
+            .andWhere('book.bookId IN (:...bookIds)', { bookIds })
             .getMany();
 
         return this.toDetailDtos(books);
@@ -110,15 +108,13 @@ export class BooksService {
     ): Promise<{ items: BookDetailResponseDto[]; totalItems: number }> {
         this.logger.debug({ categoryId, page, pageSize, operation: 'findPageByCategoryId' }, 'Listing books by category');
 
-        const [books, totalItems] = await this.booksRepository
-            .createQueryBuilder('book')
+        const [books, totalItems] = await this.visibleBooksQuery()
             .innerJoin(
                 BookCategory,
                 'bookCategory',
                 'bookCategory.bookId = book.bookId AND bookCategory.categoryId = :categoryId',
                 { categoryId },
             )
-            .leftJoinAndSelect('book.provider', 'provider')
             .orderBy('book.title', 'ASC')
             .addOrderBy('book.bookId', 'ASC')
             .skip((page - 1) * pageSize)
@@ -187,12 +183,12 @@ export class BooksService {
     async findOne(bookId: number): Promise<BookDetailResponseDto> {
         this.logger.debug({ bookId, operation: 'findOne' }, 'Looking up book');
 
-        const book = await this.booksRepository
-            .createQueryBuilder('book')
-            .leftJoinAndSelect('book.provider', 'provider')
-            .where('book.bookId = :bookId', { bookId })
+        const book = await this.visibleBooksQuery()
+            .andWhere('book.bookId = :bookId', { bookId })
             .getOne();
 
+        // Una obra que no se puede leer dentro de BiblioLink responde igual
+        // que una inexistente.
         if (!book) {
             throw new NotFoundException('El libro no existe.');
         }
@@ -516,6 +512,14 @@ export class BooksService {
     private async upsertFromExternalBook(
         externalBook: ExternalBook,
     ): Promise<UpsertResult> {
+        // `catalogs` ya descarta estas obras; se vuelve a comprobar aquí para
+        // que nunca entre a `books` algo que solo se lee fuera de BiblioLink.
+        if (!isReadableContent(externalBook)) {
+            throw new UnprocessableEntityException(
+                'La obra no está disponible para leer en BiblioLink.',
+            );
+        }
+
         const providerId = await this.catalogsService.findProviderIdByCode(
             externalBook.providerCode,
         );
@@ -736,6 +740,17 @@ export class BooksService {
         }
 
         return languagesByBook;
+    }
+
+    // Consulta base de las obras visibles: solo las que se leen dentro de
+    // BiblioLink, con su proveedor.
+    private visibleBooksQuery() {
+        return andWhereBookIsReadable(
+            this.booksRepository
+                .createQueryBuilder('book')
+                .leftJoinAndSelect('book.provider', 'provider'),
+            'book',
+        );
     }
 
     // Arma la respuesta de varias obras cargando autores, idiomas y categorías

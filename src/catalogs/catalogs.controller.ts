@@ -1,6 +1,4 @@
-import { Controller, Get, Param, Query, } from '@nestjs/common';
-
-import { localizedParseEnumPipe } from '../i18n/localized-pipes';
+import { Controller, Get, Param, ParseEnumPipe, Query, } from '@nestjs/common';
 
 import { CatalogsService } from './catalogs.service';
 import { CatalogBookResponseDto, CatalogSearchResponseDto, } from './dto/catalog-book-response.dto';
@@ -48,7 +46,7 @@ export class CatalogsController {
     // Detalle de una obra dentro de un proveedor concreto.
     @Get('providers/:providerCode/book')
     async findExternalBook(
-        @Param('providerCode', localizedParseEnumPipe(BookProviderCode, 'VALIDATION_PROVIDER_INVALID'))
+        @Param('providerCode', new ParseEnumPipe(BookProviderCode))
         providerCode: BookProviderCode,
         @Query() externalBookReferenceDto: ExternalBookReferenceDto,
     ): Promise<CatalogBookResponseDto> {

@@ -6,7 +6,6 @@ import { Logger } from 'nestjs-pino';
 import { AppModule } from './app.module';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { envs } from './config/envs';
-import { createValidationException } from './i18n/localized-validation';
 
 async function bootstrap(): Promise<void> {
     const app = await NestFactory.create(AppModule, { bufferLogs: true, rawBody: true, });
@@ -23,9 +22,6 @@ async function bootstrap(): Promise<void> {
             whitelist: true,
             forbidNonWhitelisted: true,
             transform: true,
-            // Cada campo inválido sale con su código para traducirlo al
-            // idioma del frontend (ver `src/i18n/`).
-            exceptionFactory: createValidationException,
         }),
     );
 

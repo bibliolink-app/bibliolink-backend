@@ -3,8 +3,6 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { Repository } from 'typeorm';
 
-import { localizedError } from '../i18n/localized-error';
-
 import { BOOK_CATALOG_PROVIDERS } from './constants/catalogs.constants';
 import { BOOK_PROVIDERS_SEED } from './data/book-providers.seed';
 import { SearchCatalogDto } from './dto/search-catalog.dto';
@@ -84,7 +82,7 @@ export class CatalogsService {
 
         if (!provider) {
             throw new NotFoundException(
-                localizedError('CATALOG_PROVIDER_NOT_REGISTERED', { providerCode }),
+                `El proveedor "${providerCode}" no está registrado. Ejecute el seed de proveedores.`,
             );
         }
 
@@ -175,7 +173,7 @@ export class CatalogsService {
 
         if (!book) {
             throw new NotFoundException(
-                localizedError('CATALOG_BOOK_NOT_FOUND', { providerCode }),
+                `El proveedor "${providerCode}" no tiene una obra con la referencia indicada.`,
             );
         }
 
@@ -183,7 +181,7 @@ export class CatalogsService {
         // inexistente: así tampoco se puede importar ni agregar a favoritos.
         if (!isReadableContent(book)) {
             throw new NotFoundException(
-                localizedError('CATALOG_BOOK_NOT_READABLE'),
+                'La obra no está disponible para leer en BiblioLink.',
             );
         }
 
@@ -200,7 +198,7 @@ export class CatalogsService {
 
         if (!provider) {
             throw new NotFoundException(
-                localizedError('CATALOG_PROVIDER_NOT_SUPPORTED', { providerCode }),
+                `El proveedor "${providerCode}" no está soportado.`,
             );
         }
 
@@ -211,7 +209,7 @@ export class CatalogsService {
         // Un proveedor desactivado por un administrador deja de consultarse.
         if (storedProvider && !storedProvider.active) {
             throw new NotFoundException(
-                localizedError('CATALOG_PROVIDER_DISABLED', { providerCode }),
+                `El proveedor "${providerCode}" está desactivado.`,
             );
         }
 

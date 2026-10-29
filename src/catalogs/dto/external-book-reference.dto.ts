@@ -2,7 +2,6 @@ import { Transform } from 'class-transformer';
 import { IsNotEmpty, IsString, MaxLength } from 'class-validator';
 
 import { trimString } from '../../common/transformers/trim-string.transformer';
-import { localizedValidation } from '../../i18n/localized-validation';
 import { BOOK_EXTERNAL_REFERENCE_MAX_LENGTH } from '../constants/catalogs.constants';
 
 // Identifica una obra dentro de un proveedor externo. La referencia puede
@@ -10,11 +9,10 @@ import { BOOK_EXTERNAL_REFERENCE_MAX_LENGTH } from '../constants/catalogs.consta
 // consulta y no como segmento de la ruta.
 export class ExternalBookReferenceDto {
     @Transform(trimString)
-    @IsString(localizedValidation('VALIDATION_REFERENCE_STRING'))
-    @IsNotEmpty(localizedValidation('VALIDATION_REFERENCE_REQUIRED'))
-    @MaxLength(
-        BOOK_EXTERNAL_REFERENCE_MAX_LENGTH,
-        localizedValidation('VALIDATION_REFERENCE_MAX_LENGTH', { max: BOOK_EXTERNAL_REFERENCE_MAX_LENGTH }),
-    )
+    @IsString({ message: 'La referencia debe ser un texto.' })
+    @IsNotEmpty({ message: 'La referencia es obligatoria.' })
+    @MaxLength(BOOK_EXTERNAL_REFERENCE_MAX_LENGTH, {
+        message: `La referencia no puede superar los ${BOOK_EXTERNAL_REFERENCE_MAX_LENGTH} caracteres.`,
+    })
     reference!: string;
 }

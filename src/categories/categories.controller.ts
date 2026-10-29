@@ -1,7 +1,6 @@
-import { Controller, Get, Param, Query, } from '@nestjs/common';
+import { Controller, Get, Param, ParseEnumPipe, Query, } from '@nestjs/common';
 
 import { BookCategoryCode } from '../catalogs/enums/book-category-code.enum';
-import { localizedParseEnumPipe } from '../i18n/localized-pipes';
 import { CategoriesService } from './categories.service';
 import { CategoryBooksResponseDto } from './dto/category-books-response.dto';
 import { CategoryResponseDto } from './dto/category-response.dto';
@@ -22,7 +21,7 @@ export class CategoriesController {
     // Obras guardadas de una categoría, paginadas y ordenadas por título.
     @Get(':code/books')
     findBooks(
-        @Param('code', localizedParseEnumPipe(BookCategoryCode, 'VALIDATION_CATEGORY_CODE_INVALID'))
+        @Param('code', new ParseEnumPipe(BookCategoryCode))
         code: BookCategoryCode,
         @Query() findCategoryBooksDto: FindCategoryBooksDto,
     ): Promise<CategoryBooksResponseDto> {

@@ -13,9 +13,6 @@ import { isReadableContent } from '../catalogs/utils/book-content.util';
 import { BookCategory } from '../categories/entities/book-category.entity';
 import { Category } from '../categories/entities/category.entity';
 import { isMySqlUniqueViolation } from '../common/databases/is-mysql-unique-violation';
-import { DEFAULT_LANGUAGE } from '../i18n/i18n.constants';
-import { localizedError } from '../i18n/localized-error';
-import { translate } from '../i18n/translate';
 import { BOOKS_BULK_IMPORT_DEFAULT_MAX_PAGES } from './constants/books.constants';
 import { resolveLanguageName } from './data/language-names';
 import { BookCategoryResponseDto } from './dto/book-category-response.dto';
@@ -172,7 +169,7 @@ export class BooksService {
         });
 
         if (!book) {
-            throw new NotFoundException(localizedError('BOOK_NOT_FOUND'));
+            throw new NotFoundException('El libro no existe.');
         }
 
         return {
@@ -193,7 +190,7 @@ export class BooksService {
         // Una obra que no se puede leer dentro de BiblioLink responde igual
         // que una inexistente.
         if (!book) {
-            throw new NotFoundException(localizedError('BOOK_NOT_FOUND'));
+            throw new NotFoundException('El libro no existe.');
         }
 
         const [authorsByBook, languagesByBook, categoriesByBook] = await Promise.all([
@@ -279,8 +276,7 @@ export class BooksService {
                         providerCode: externalBook.providerCode,
                         externalReference: externalBook.externalReference,
                         title: externalBook.title,
-                        code: 'BOOK_IMPORT_FAILED',
-                        reason: translate('BOOK_IMPORT_FAILED', DEFAULT_LANGUAGE),
+                        reason: 'No se pudo guardar la obra. Revise los registros del servidor.',
                     });
                 }
             }
@@ -491,8 +487,7 @@ export class BooksService {
                         providerCode: externalBook.providerCode,
                         externalReference: externalBook.externalReference,
                         title: externalBook.title,
-                        code: 'BOOK_IMPORT_FAILED',
-                        reason: translate('BOOK_IMPORT_FAILED', DEFAULT_LANGUAGE),
+                        reason: 'No se pudo guardar la obra. Revise los registros del servidor.',
                     });
                 }
             }
@@ -521,7 +516,7 @@ export class BooksService {
         // que nunca entre a `books` algo que solo se lee fuera de BiblioLink.
         if (!isReadableContent(externalBook)) {
             throw new UnprocessableEntityException(
-                localizedError('CATALOG_BOOK_NOT_READABLE'),
+                'La obra no está disponible para leer en BiblioLink.',
             );
         }
 

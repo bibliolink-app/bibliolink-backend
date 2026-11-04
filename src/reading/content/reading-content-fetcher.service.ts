@@ -1,4 +1,5 @@
 import { BadGatewayException, Injectable } from '@nestjs/common';
+import { localizedError } from '../../i18n/localized-error';
 import { lookup } from 'node:dns/promises';
 import { isIP } from 'node:net';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
@@ -40,11 +41,11 @@ export class ReadingContentFetcherService {
                     await response.body?.cancel();
 
                     if (!location) {
-                        throw new BadGatewayException('El proveedor devolvió una redirección inválida.');
+                        throw new BadGatewayException(localizedError('READING_CONTENT_REDIRECT_INVALID'));
                     }
 
                     if (redirectCount === MAX_REDIRECTS) {
-                        throw new BadGatewayException('El contenido excedió el límite de redirecciones.');
+                        throw new BadGatewayException(localizedError('READING_CONTENT_REDIRECT_LIMIT'));
                     }
 
                     currentUrl = this.parseUrl(location, currentUrl);
@@ -55,7 +56,7 @@ export class ReadingContentFetcherService {
                     await response.body?.cancel();
 
                     throw new BadGatewayException(
-                        `No fue posible obtener el contenido del libro. Estado HTTP ${response.status}.`,
+                        localizedError('READING_CONTENT_HTTP_ERROR', { status: response.status }),
                     );
                 }
 
@@ -65,7 +66,7 @@ export class ReadingContentFetcherService {
 
             }
 
-            throw new BadGatewayException('No fue posible obtener el contenido del libro.');
+            throw new BadGatewayException(localizedError('READING_CONTENT_FETCH_FAILED'));
         } catch (error: unknown) {
             this.logger.error(
                 {
@@ -79,7 +80,7 @@ export class ReadingContentFetcherService {
                 throw error;
             }
 
-            throw new BadGatewayException('No fue posible obtener el contenido del libro.');
+            throw new BadGatewayException(localizedError('READING_CONTENT_FETCH_FAILED'));
         }
     }
 
@@ -89,15 +90,15 @@ export class ReadingContentFetcherService {
         try {
             url = baseUrl ? new URL(value, baseUrl) : new URL(value);
         } catch {
-            throw new BadGatewayException('La referencia del contenido no contiene una URL válida.');
+            throw new BadGatewayException(localizedError('READING_CONTENT_URL_INVALID'));
         }
 
         if (url.protocol !== 'http:' && url.protocol !== 'https:') {
-            throw new BadGatewayException('El protocolo del contenido no está permitido.');
+            throw new BadGatewayException(localizedError('READING_CONTENT_PROTOCOL_NOT_ALLOWED'));
         }
 
         if (url.username || url.password) {
-            throw new BadGatewayException('La referencia del contenido contiene credenciales no permitidas.');
+            throw new BadGatewayException(localizedError('READING_CONTENT_CREDENTIALS_NOT_ALLOWED'));
         }
 
         return url;
@@ -111,12 +112,12 @@ export class ReadingContentFetcherService {
             hostname.endsWith('.localhost') ||
             hostname.endsWith('.local')
         ) {
-            throw new BadGatewayException('El destino del contenido no está permitido.');
+            throw new BadGatewayException(localizedError('READING_CONTENT_DESTINATION_NOT_ALLOWED'));
         }
 
         if (isIP(hostname)) {
             if (!this.isPublicIp(hostname)) {
-                throw new BadGatewayException('El destino del contenido no está permitido.');
+                throw new BadGatewayException(localizedError('READING_CONTENT_DESTINATION_NOT_ALLOWED'));
             }
 
             return;
@@ -131,7 +132,7 @@ export class ReadingContentFetcherService {
             addresses.length === 0 ||
             addresses.some(({ address }) => !this.isPublicIp(address))
         ) {
-            throw new BadGatewayException('El destino del contenido no está permitido.');
+            throw new BadGatewayException(localizedError('READING_CONTENT_DESTINATION_NOT_ALLOWED'));
         }
     }
 
@@ -144,7 +145,7 @@ export class ReadingContentFetcherService {
         ) {
             await response.body?.cancel();
 
-            throw new BadGatewayException('El contenido del libro excede el tamaño permitido.');
+            throw new BadGatewayException(localizedError('READING_CONTENT_TOO_LARGE'));
         }
 
         if (!response.body) {
@@ -167,7 +168,7 @@ export class ReadingContentFetcherService {
             if (totalBytes > envs.reading.contentMaxBytes) {
                 await reader.cancel();
 
-                throw new BadGatewayException('El contenido del libro excede el tamaño permitido.');
+                throw new BadGatewayException(localizedError('READING_CONTENT_TOO_LARGE'));
             }
 
             chunks.push(value);

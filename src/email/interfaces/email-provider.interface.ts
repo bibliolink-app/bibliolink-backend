@@ -6,6 +6,9 @@ export interface SendTemplateEmailOptions {
     // Identifica la plantilla que debe utilizar el proveedor de correo.
     templateId: number;
 
+    // Si se omite, se conserva el asunto definido en la plantilla.
+    subject?: string;
+
     // Valores dinámicos que se insertarán dentro de la plantilla.
     params: Record<string, unknown>;
 }

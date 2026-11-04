@@ -1,5 +1,7 @@
 import { BadRequestException } from '@nestjs/common';
 
+import { localizedError } from '../../i18n/localized-error';
+
 type LocalDateParts = {
     year: number;
     month: number;
@@ -47,7 +49,7 @@ function isValidParts(parts: LocalDateParts): boolean {
 export function normalizeLocalDate(value: unknown): string {
     if (typeof value !== 'string') {
         throw new BadRequestException(
-            'La fecha debe ser una cadena de texto.',
+            localizedError('VALIDATION_DATE_STRING'),
         );
     }
 
@@ -55,7 +57,7 @@ export function normalizeLocalDate(value: unknown): string {
 
     if (!trimmed) {
         throw new BadRequestException(
-            'La fecha no puede estar vacía.',
+            localizedError('VALIDATION_DATE_REQUIRED'),
         );
     }
 
@@ -65,7 +67,7 @@ export function normalizeLocalDate(value: unknown): string {
 
     if (!match) {
         throw new BadRequestException(
-            `Fecha inválida ("${trimmed}"). El formato válido es YYYY-MM-DD.`,
+            localizedError('VALIDATION_DATE_FORMAT', { value: trimmed }),
         );
     }
 
@@ -77,7 +79,7 @@ export function normalizeLocalDate(value: unknown): string {
 
     if (!isValidParts(parts)) {
         throw new BadRequestException(
-            `La fecha "${trimmed}" no existe.`,
+            localizedError('VALIDATION_DATE_INVALID', { value: trimmed }),
         );
     }
 

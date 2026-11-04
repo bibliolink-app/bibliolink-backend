@@ -1,16 +1,15 @@
 import { IsNotEmpty, IsString, MaxLength } from 'class-validator';
 
+import { localizedValidation } from '../../i18n/localized-validation';
 import { IsStrongPassword } from '../../common/decorators/is-strong-password.decorator';
 
 export class ResetPasswordDto {
-    @IsString({ message: 'El token de recuperación debe ser un texto.' })
-    @IsNotEmpty({ message: 'El token de recuperación es obligatorio.' })
-    @MaxLength(64, {
-        message: 'El token de recuperación supera la longitud permitida.',
-    })
+    @IsString(localizedValidation('VALIDATION_RESET_TOKEN_STRING'))
+    @IsNotEmpty(localizedValidation('VALIDATION_RESET_TOKEN_REQUIRED'))
+    @MaxLength(64, localizedValidation('VALIDATION_RESET_TOKEN_MAX_LENGTH'))
     token!: string;
 
-    @IsString({ message: 'La nueva contraseña debe ser un texto.' })
+    @IsString(localizedValidation('VALIDATION_NEW_PASSWORD_STRING'))
     @IsStrongPassword()
     newPassword!: string;
 }

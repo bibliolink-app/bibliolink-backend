@@ -1,0 +1,17 @@
+{
+    "EMAIL_PASSWORD_RESET_SUBJECT": "Restablece tu contraseña de BiblioLink",
+    "EMAIL_PASSWORD_RESET_PREHEADER": "Restablece de forma segura la contraseña de tu cuenta de BiblioLink.",
+    "EMAIL_PASSWORD_RESET_TITLE": "Recuperación de contraseña",
+    "EMAIL_PASSWORD_RESET_GREETING": "Hola",
+    "EMAIL_PASSWORD_RESET_INTRO": "Recibimos una solicitud para restablecer la contraseña de tu cuenta en BiblioLink.",
+    "EMAIL_PASSWORD_RESET_ACTION": "Restablecer contraseña",
+    "EMAIL_PASSWORD_RESET_SECURITY_TITLE": "Información de seguridad",
+    "EMAIL_PASSWORD_RESET_SECURITY_NOTICE": "Este enlace estará disponible por tiempo limitado y es exclusivo para tu cuenta. No lo compartas con otras personas.",
+    "EMAIL_PASSWORD_RESET_IGNORE_NOTICE": "Si no solicitaste este cambio, puedes ignorar este correo. Tu contraseña actual continuará siendo válida.",
+    "EMAIL_PASSWORD_RESET_LINK_HELP": "Si el botón no funciona, copia y pega el siguiente enlace en tu navegador:",
+    "EMAIL_BRAND_TAGLINE": "Historias que te conectan",
+    "EMAIL_BRAND_CLOSING": "Conecta con tu próxima historia.",
+    "EMAIL_RIGHTS_RESERVED": "Todos los derechos reservados.",
+    "EMAIL_AUTOMATED_NOTICE": "Este es un correo automático. Por favor, no respondas a este mensaje.",
+    "EMAIL_SECURITY_FOOTER": "Este mensaje fue enviado por BiblioLink como parte de un proceso de seguridad de tu cuenta."
+}

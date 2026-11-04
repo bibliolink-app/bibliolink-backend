@@ -1,4 +1,5 @@
 import { Injectable, UnprocessableEntityException } from '@nestjs/common';
+import { localizedError } from '../../i18n/localized-error';
 
 import { BookContentFormat } from '../../catalogs/enums/book-content-format.enum';
 import { ReadingPageResponseDto } from '../dto/reading-page-response.dto';
@@ -32,7 +33,7 @@ export class ReadingContentService {
                 return this.pdfContentProcessorService.process(content, pageNumber);
             case BookContentFormat.EXTERNAL_PAGE:
             case BookContentFormat.UNSUPPORTED:
-                throw new UnprocessableEntityException('El formato del contenido no es compatible con el lector.');
+                throw new UnprocessableEntityException(localizedError('READING_CONTENT_FORMAT_UNSUPPORTED'));
         }
     }
 }

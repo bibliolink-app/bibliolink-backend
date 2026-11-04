@@ -36,6 +36,7 @@ export class BrevoEmailProvider implements EmailProvider {
             ],
             // Indica qué plantilla de Brevo debe utilizarse.
             templateId: options.templateId,
+            ...(options.subject !== undefined && { subject: options.subject }),
 
             // Envía los valores dinámicos que utiliza la plantilla.
             params: options.params,

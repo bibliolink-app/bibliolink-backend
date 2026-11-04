@@ -3,6 +3,10 @@ import {
     ValidationOptions,
 } from 'class-validator';
 
+import { DEFAULT_LANGUAGE } from '../../i18n/i18n.constants';
+import { localizedValidation } from '../../i18n/localized-validation';
+import { translate } from '../../i18n/translate';
+
 export function IsStrongPassword(
     validationOptions?: ValidationOptions,
 ): PropertyDecorator {
@@ -11,7 +15,13 @@ export function IsStrongPassword(
             name: 'isStrongPassword',
             target: object.constructor,
             propertyName: propertyName.toString(),
-            options: validationOptions,
+            options: {
+                // Un mensaje personalizado conserva también su propio contexto.
+                ...(validationOptions?.message === undefined
+                    ? localizedValidation('VALIDATION_STRONG_PASSWORD')
+                    : {}),
+                ...validationOptions,
+            },
             validator: {
                 validate(value: unknown): boolean {
                     if (typeof value !== 'string') {
@@ -27,7 +37,7 @@ export function IsStrongPassword(
 
                 defaultMessage(
                 ): string {
-                    return 'La contraseña debe tener al menos 8 caracteres, una letra, un número y un carácter especial, y no superar 72 bytes UTF-8.';
+                    return translate('VALIDATION_STRONG_PASSWORD', DEFAULT_LANGUAGE);
                 },
             },
         });

@@ -1,0 +1,17 @@
+{
+    "EMAIL_PASSWORD_RESET_SUBJECT": "Réinitialisez votre mot de passe BiblioLink",
+    "EMAIL_PASSWORD_RESET_PREHEADER": "Réinitialisez en toute sécurité le mot de passe de votre compte BiblioLink.",
+    "EMAIL_PASSWORD_RESET_TITLE": "Récupération du mot de passe",
+    "EMAIL_PASSWORD_RESET_GREETING": "Bonjour",
+    "EMAIL_PASSWORD_RESET_INTRO": "Nous avons reçu une demande de réinitialisation du mot de passe de votre compte BiblioLink.",
+    "EMAIL_PASSWORD_RESET_ACTION": "Réinitialiser le mot de passe",
+    "EMAIL_PASSWORD_RESET_SECURITY_TITLE": "Informations de sécurité",
+    "EMAIL_PASSWORD_RESET_SECURITY_NOTICE": "Ce lien est disponible pour une durée limitée et est réservé à votre compte. Ne le partagez avec personne.",
+    "EMAIL_PASSWORD_RESET_IGNORE_NOTICE": "Si vous n’avez pas demandé ce changement, vous pouvez ignorer cet e-mail. Votre mot de passe actuel restera valide.",
+    "EMAIL_PASSWORD_RESET_LINK_HELP": "Si le bouton ne fonctionne pas, copiez et collez le lien suivant dans votre navigateur :",
+    "EMAIL_BRAND_TAGLINE": "Des histoires qui vous rapprochent",
+    "EMAIL_BRAND_CLOSING": "Découvrez votre prochaine histoire.",
+    "EMAIL_RIGHTS_RESERVED": "Tous droits réservés.",
+    "EMAIL_AUTOMATED_NOTICE": "Ceci est un e-mail automatique. Veuillez ne pas répondre à ce message.",
+    "EMAIL_SECURITY_FOOTER": "Ce message a été envoyé par BiblioLink dans le cadre d’une procédure de sécurité de votre compte."
+}

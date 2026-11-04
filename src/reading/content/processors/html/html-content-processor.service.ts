@@ -1,4 +1,5 @@
 import { Injectable, UnprocessableEntityException } from '@nestjs/common';
+import { localizedError } from '../../../../i18n/localized-error';
 import { DomUtils, parseDocument } from 'htmlparser2';
 import sanitizeHtml from 'sanitize-html';
 import { ReadingPageResponseDto } from '../../../dto/reading-page-response.dto';
@@ -12,7 +13,7 @@ import { TARGET_PAGE_CHARACTERS } from '../../constants/reading-content.constant
 export class HtmlContentProcessorService {
     process(content: Buffer, pageNumber: number): ReadingPageResponseDto {
         if (pageNumber < 1) {
-            throw new UnprocessableEntityException('El número de página debe ser mayor o igual a 1.');
+            throw new UnprocessableEntityException(localizedError('VALIDATION_PAGE_MIN', { min: 1 }));
         }
 
         const sanitizedHtml = this.sanitizeContent(content);
@@ -21,7 +22,7 @@ export class HtmlContentProcessorService {
 
         if (page === undefined) {
             throw new UnprocessableEntityException(
-                'La página solicitada no existe.',
+                localizedError('READING_PAGE_NOT_FOUND'),
             );
         }
 
@@ -111,7 +112,7 @@ export class HtmlContentProcessorService {
         const sanitizedHtml = this.sanitize(content.toString('utf8'));
 
         if (!sanitizedHtml.trim()) {
-            throw new UnprocessableEntityException('El libro no contiene contenido HTML legible.');
+            throw new UnprocessableEntityException(localizedError('READING_HTML_CONTENT_EMPTY'));
         }
 
         return sanitizedHtml;

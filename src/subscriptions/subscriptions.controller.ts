@@ -3,6 +3,7 @@ import { BadRequestException, Body, Controller, Get, HttpCode, HttpStatus, Post,
 import type { RawBodyRequest } from '@nestjs/common';
 import type { Request } from 'express';
 
+import { localizedError } from '../i18n/localized-error';
 import type { AuthenticatedUser, } from '../auth/interfaces/authenticated-user.interface';
 
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -74,7 +75,7 @@ async getMembership( @Req() request: AuthenticatedRequest, ): Promise<Membership
     async receivePayPalWebhook(@Req() request: RawBodyRequest<Request>,): Promise<void> {
         if (!request.rawBody?.length) {
             throw new BadRequestException(
-                'El cuerpo de la notificación está vacío.',
+                localizedError('SUBSCRIPTION_WEBHOOK_BODY_REQUIRED'),
             );
         }
 

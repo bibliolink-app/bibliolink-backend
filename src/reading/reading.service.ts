@@ -1,4 +1,5 @@
 import { ConflictException, ForbiddenException, Injectable, UnprocessableEntityException } from '@nestjs/common';
+import { localizedError } from '../i18n/localized-error';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
@@ -85,7 +86,7 @@ export class ReadingService {
     const hasPremiumAccess = await this.subscriptionsService.hasPremiumAccess(userId);
 
     if (hasPremiumAccess) {
-      throw new ConflictException('Los usuarios Premium no requieren anuncios para continuar leyendo.');
+      throw new ConflictException(localizedError('READING_PREMIUM_AD_NOT_REQUIRED'));
     }
 
     const access = await this.readingAccessRepository.findOne({
@@ -93,11 +94,11 @@ export class ReadingService {
     });
 
     if (!access) {
-      throw new ConflictException('Primero debe iniciar un periodo de lectura.');
+      throw new ConflictException(localizedError('READING_PERIOD_REQUIRED'));
     }
 
     if (access.expiresAt > new Date()) {
-      throw new ConflictException('El periodo de lectura actual todavía está vigente.');
+      throw new ConflictException(localizedError('READING_PERIOD_ACTIVE'));
     }
 
     return this.adsService.issueRewardChallenge(userId);
@@ -107,7 +108,7 @@ export class ReadingService {
     const hasPremiumAccess = await this.subscriptionsService.hasPremiumAccess(userId);
 
     if (hasPremiumAccess) {
-      throw new ConflictException('Los usuarios Premium no requieren recompensas para continuar leyendo.');
+      throw new ConflictException(localizedError('READING_PREMIUM_REWARD_NOT_REQUIRED'));
     }
 
     return this.readingAccessRepository.manager.transaction(async (manager) => {
@@ -120,19 +121,19 @@ export class ReadingService {
         .getOne();
 
       if (!access) {
-        throw new ConflictException('Primero debe iniciar un periodo de lectura.');
+        throw new ConflictException(localizedError('READING_PERIOD_REQUIRED'));
       }
 
       const now = new Date();
 
       if (access.expiresAt > now) {
-        throw new ConflictException('El periodo de lectura actual todavía está vigente.');
+        throw new ConflictException(localizedError('READING_PERIOD_ACTIVE'));
       }
 
       const consumed = await this.adsService.consumeRewardChallenge(userId, token, manager);
 
       if (!consumed) {
-        throw new ConflictException('La recompensa no es válida, expiró o ya fue utilizada.');
+        throw new ConflictException(localizedError('READING_REWARD_INVALID'));
       }
 
       access.expiresAt = new Date(now.getTime() + envs.reading.freePeriodMs);
@@ -194,14 +195,14 @@ export class ReadingService {
 
   private ensureReadableSource(source: BookReadingSource): asserts source is ReadableBookSource {
     if (!source.contentReference || !source.contentFormat) {
-      throw new UnprocessableEntityException('El libro no tiene contenido disponible para lectura.');
+      throw new UnprocessableEntityException(localizedError('READING_CONTENT_UNAVAILABLE'));
     }
 
     if (
       source.contentFormat === BookContentFormat.EXTERNAL_PAGE ||
       source.contentFormat === BookContentFormat.UNSUPPORTED
     ) {
-      throw new UnprocessableEntityException('El formato del contenido no es compatible con el lector.');
+      throw new UnprocessableEntityException(localizedError('READING_CONTENT_FORMAT_UNSUPPORTED'));
     }
   }
 
@@ -217,11 +218,11 @@ export class ReadingService {
       });
 
       if (!access) {
-        throw new ForbiddenException('Primero debe iniciar un periodo de lectura.');
+        throw new ForbiddenException(localizedError('READING_PERIOD_REQUIRED'));
       }
 
       if (access.expiresAt <= new Date()) {
-        throw new ForbiddenException('El periodo de lectura ha expirado.');
+        throw new ForbiddenException(localizedError('READING_PERIOD_EXPIRED'));
       }
     }
     return source;

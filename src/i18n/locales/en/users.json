@@ -1,0 +1,13 @@
+{
+    "USER_ACCOUNT_ALREADY_REGISTERED": "The username or email address is already registered.",
+    "USER_EMAIL_ALREADY_EXISTS": "A user with this email address already exists.",
+    "USER_USERNAME_ALREADY_EXISTS": "A user with this username already exists.",
+    "USER_NOT_FOUND": "The user does not exist.",
+    "USER_SELF_DEACTIVATION_FORBIDDEN": "You cannot disable your own account.",
+    "USER_ALREADY_INACTIVE": "The user is already inactive.",
+    "USER_ALREADY_ACTIVE": "The user is already active.",
+    "USER_UPDATED": "User updated successfully.",
+    "USER_DISABLED": "User disabled successfully.",
+    "USER_ENABLED": "User enabled successfully.",
+    "VALIDATION_USER_ID_INTEGER": "The user ID must be an integer."
+}

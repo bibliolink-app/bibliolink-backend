@@ -2,6 +2,7 @@ import { Injectable, ServiceUnavailableException } from '@nestjs/common';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 
 import { envs } from '../../config/envs';
+import { localizedError } from '../../i18n/localized-error';
 import type { CaptchaProvider } from '../interfaces/captcha-provider.interface';
 
 const SITEVERIFY_URL = 'https://challenges.cloudflare.com/turnstile/v0/siteverify';
@@ -60,7 +61,7 @@ export class CloudflareTurnstileProvider implements CaptchaProvider {
         } catch (error: unknown) {
             this.logger.error({ err: error, stage, statusCode }, 'Cloudflare Turnstile verification failed');
             throw new ServiceUnavailableException(
-                'El servicio de verificación CAPTCHA no está disponible.',
+                localizedError('CAPTCHA_SERVICE_UNAVAILABLE'),
             );
         }
     }

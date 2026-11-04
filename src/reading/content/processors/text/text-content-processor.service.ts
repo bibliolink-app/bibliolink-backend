@@ -1,4 +1,5 @@
 import { Injectable, UnprocessableEntityException } from '@nestjs/common';
+import { localizedError } from '../../../../i18n/localized-error';
 import { ReadingPageResponseDto } from '../../../dto/reading-page-response.dto';
 import { ReadingContentType } from '../../../enums/reading-content-type.enum';
 import { TARGET_PAGE_CHARACTERS } from '../../constants/reading-content.constants';
@@ -10,7 +11,7 @@ import { TARGET_PAGE_CHARACTERS } from '../../constants/reading-content.constant
 export class TextContentProcessorService {
     process(content: Buffer, pageNumber: number): ReadingPageResponseDto {
         if (pageNumber < 1) {
-            throw new UnprocessableEntityException('El número de página debe ser mayor o igual a 1.');
+            throw new UnprocessableEntityException(localizedError('VALIDATION_PAGE_MIN', { min: 1 }));
         }
 
         const text = content
@@ -20,14 +21,14 @@ export class TextContentProcessorService {
             .trim();
 
         if (!text) {
-            throw new UnprocessableEntityException('El libro no contiene texto legible.');
+            throw new UnprocessableEntityException(localizedError('READING_TEXT_CONTENT_EMPTY'));
         }
 
         const pages = this.paginate(text);
         const page = pages[pageNumber - 1];
 
         if (page === undefined) {
-            throw new UnprocessableEntityException('La página solicitada no existe.');
+            throw new UnprocessableEntityException(localizedError('READING_PAGE_NOT_FOUND'));
         }
 
         return {

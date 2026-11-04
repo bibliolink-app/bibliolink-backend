@@ -1,4 +1,6 @@
-import { Body, Controller, Get, HttpCode, HttpStatus, Param, ParseIntPipe, Post, UseGuards, } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, HttpStatus, Param, Post, UseGuards, } from '@nestjs/common';
+
+import { localizedParseIntPipe } from '../i18n/localized-pipes';
 
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -21,7 +23,7 @@ export class ReadingController {
 
   @Post('books/:bookId/access')
   @HttpCode(HttpStatus.OK)
-  startReading(@CurrentUser() currentUser: AuthenticatedUser, @Param('bookId', ParseIntPipe) bookId: number,): Promise<ReadingAccessResponseDto> {
+  startReading(@CurrentUser() currentUser: AuthenticatedUser, @Param('bookId', localizedParseIntPipe('VALIDATION_BOOK_ID_INTEGER')) bookId: number,): Promise<ReadingAccessResponseDto> {
     return this.readingService.startReading(currentUser.userId, bookId);
   }
 
@@ -44,7 +46,7 @@ export class ReadingController {
   }
 
   @Get('books/:bookId/pages/:pageNumber')
-  getReadingPage(@CurrentUser() currentUser: AuthenticatedUser, @Param('bookId', ParseIntPipe) bookId: number, @Param('pageNumber', ParseIntPipe) pageNumber: number): Promise<ReadingPageResponseDto> {
+  getReadingPage(@CurrentUser() currentUser: AuthenticatedUser, @Param('bookId', localizedParseIntPipe('VALIDATION_BOOK_ID_INTEGER')) bookId: number, @Param('pageNumber', localizedParseIntPipe('VALIDATION_PAGE_INTEGER')) pageNumber: number): Promise<ReadingPageResponseDto> {
     return this.readingService.getReadingPage(currentUser.userId, bookId, pageNumber);
   }
 }

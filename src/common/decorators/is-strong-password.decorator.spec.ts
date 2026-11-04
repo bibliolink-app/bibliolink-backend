@@ -2,6 +2,7 @@ import { validate } from 'class-validator';
 import { describe, expect, it } from 'vitest';
 
 import { IsStrongPassword } from './is-strong-password.decorator';
+import { createValidationException } from '../../i18n/localized-validation';
 
 class PasswordDto {
     @IsStrongPassword()
@@ -9,6 +10,20 @@ class PasswordDto {
 }
 
 describe('IsStrongPassword', () => {
+    it('preserves custom messages and validation groups without assigning the default translation code', async () => {
+        class CustomPasswordDto {
+            @IsStrongPassword({ message: 'Custom password message', groups: ['create'] })
+            password = 'short';
+        }
+
+        const dto = new CustomPasswordDto();
+        expect(await validate(dto, { groups: ['update'], strictGroups: true, forbidUnknownValues: false })).toEqual([]);
+        const errors = await validate(dto, { groups: ['create'] });
+        expect(createValidationException(errors).getResponse()).toMatchObject({
+            details: [{ field: 'password', code: null, message: 'Custom password message' }],
+        });
+    });
+
     it.each([
         'Abcdef1!', 'abcdef1!', 'ññññññ1!', 'Abcdef١!',
         'a'.repeat(70) + '1!', 'ñ'.repeat(35) + '1!',

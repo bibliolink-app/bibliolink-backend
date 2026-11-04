@@ -6,62 +6,49 @@ import {
     MaxLength,
 } from 'class-validator';
 
+import { localizedValidation } from '../../i18n/localized-validation';
 import { normalizeLocalDate } from '../../common/dates/local-date';
 import { trimString } from '../../common/transformers/trim-string.transformer';
 
 export class UpdateUserDto {
     @Transform(trimString)
     @IsOptional()
-    @IsString({ message: 'El nombre de usuario debe ser un texto.' })
-    @MaxLength(25, {
-        message: 'El nombre de usuario no puede superar los 25 caracteres.',
-    })
+    @IsString(localizedValidation('VALIDATION_USERNAME_STRING'))
+    @MaxLength(25, localizedValidation('VALIDATION_USERNAME_MAX_LENGTH', { max: 25 }))
     username?: string;
 
     @Transform(trimString)
     @IsOptional()
-    @IsString({ message: 'El primer nombre debe ser un texto.' })
-    @MaxLength(50, {
-        message: 'El primer nombre no puede superar los 50 caracteres.',
-    })
+    @IsString(localizedValidation('VALIDATION_FIRST_NAME_STRING'))
+    @MaxLength(50, localizedValidation('VALIDATION_FIRST_NAME_MAX_LENGTH', { max: 50 }))
     firstName?: string;
 
     @Transform(trimString)
     @IsOptional()
-    @IsString({ message: 'El segundo nombre debe ser un texto.' })
-    @MaxLength(50, {
-        message: 'El segundo nombre no puede superar los 50 caracteres.',
-    })
+    @IsString(localizedValidation('VALIDATION_MIDDLE_NAME_STRING'))
+    @MaxLength(50, localizedValidation('VALIDATION_MIDDLE_NAME_MAX_LENGTH', { max: 50 }))
     middleName?: string | null;
 
     @Transform(trimString)
     @IsOptional()
-    @IsString({ message: 'El primer apellido debe ser un texto.' })
-    @MaxLength(50, {
-        message: 'El primer apellido no puede superar los 50 caracteres.',
-    })
+    @IsString(localizedValidation('VALIDATION_FIRST_SURNAME_STRING'))
+    @MaxLength(50, localizedValidation('VALIDATION_FIRST_SURNAME_MAX_LENGTH', { max: 50 }))
     firstSurname?: string;
 
     @Transform(trimString)
     @IsOptional()
-    @IsString({ message: 'El segundo apellido debe ser un texto.' })
-    @MaxLength(50, {
-        message: 'El segundo apellido no puede superar los 50 caracteres.',
-    })
+    @IsString(localizedValidation('VALIDATION_SECOND_SURNAME_STRING'))
+    @MaxLength(50, localizedValidation('VALIDATION_SECOND_SURNAME_MAX_LENGTH', { max: 50 }))
     secondSurname?: string | null;
 
     @Transform(({ value }) => normalizeLocalDate(value))
     @IsOptional()
-    @IsString({ message: 'La fecha de nacimiento debe ser un texto.' })
+    @IsString(localizedValidation('VALIDATION_BIRTH_DATE_STRING'))
     birthDate?: string;
 
     @Transform(trimString)
     @IsOptional()
-    @IsEmail({}, {
-        message: 'El correo electrónico debe tener un formato válido.',
-    })
-    @MaxLength(254, {
-        message: 'El correo electrónico no puede superar los 254 caracteres.',
-    })
+    @IsEmail({}, localizedValidation('VALIDATION_EMAIL_FORMAT'))
+    @MaxLength(254, localizedValidation('VALIDATION_EMAIL_MAX_LENGTH', { max: 254 }))
     email?: string;
 }

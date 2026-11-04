@@ -1,6 +1,7 @@
 import { BadRequestException, HttpException, Injectable, NotFoundException, ServiceUnavailableException, UnauthorizedException, } from '@nestjs/common';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 
+import { localizedError } from '../../i18n/localized-error';
 import { envs } from '../../config/envs';
 import type { PayPalAccessTokenResponse } from './interfaces/paypal-access-token-response.interface';
 
@@ -38,7 +39,7 @@ export class PayPalProvider implements PaymentProvider {
         !result.custom_id.trim()
     ) {
         throw new BadRequestException(
-            'La suscripción no contiene una referencia de checkout válida.',
+            localizedError('SUBSCRIPTION_CHECKOUT_REFERENCE_REQUIRED'),
         );
     }
 
@@ -51,7 +52,7 @@ export class PayPalProvider implements PaymentProvider {
         result.status !== 'EXPIRED'
     ) {
         throw new ServiceUnavailableException(
-            'El proveedor devolvió un estado de suscripción desconocido.',
+            localizedError('SUBSCRIPTION_PROVIDER_STATUS_UNKNOWN'),
         );
     }
 
@@ -88,7 +89,7 @@ export class PayPalProvider implements PaymentProvider {
             );
 
             throw new ServiceUnavailableException(
-                'No fue posible consultar la información de facturación.',
+                localizedError('SUBSCRIPTION_BILLING_QUERY_FAILED'),
             );
         }
     }
@@ -214,7 +215,7 @@ export class PayPalProvider implements PaymentProvider {
             );
 
             throw new ServiceUnavailableException(
-                'No fue posible confirmar el pago.',
+                localizedError('SUBSCRIPTION_PAYMENT_CONFIRMATION_FAILED'),
             );
         }
     }
@@ -223,7 +224,7 @@ export class PayPalProvider implements PaymentProvider {
     async parseVerifiedWebhook(input: PaymentWebhookRequest,): Promise<SubscriptionPaymentEvent> {
         if (!envs.payments.webhookId) {
             throw new ServiceUnavailableException(
-                'El webhook del proveedor de pagos no está configurado.',
+                localizedError('SUBSCRIPTION_WEBHOOK_NOT_CONFIGURED'),
             );
         }
 
@@ -251,7 +252,7 @@ export class PayPalProvider implements PaymentProvider {
 
         if (!verified) {
             throw new UnauthorizedException(
-                'La notificación de pago no es auténtica.',
+                localizedError('SUBSCRIPTION_WEBHOOK_UNAUTHENTICATED'),
             );
         }
 
@@ -263,7 +264,7 @@ export class PayPalProvider implements PaymentProvider {
             );
         } catch {
             throw new BadRequestException(
-                'El contenido de la notificación es inválido.',
+                localizedError('SUBSCRIPTION_WEBHOOK_CONTENT_INVALID'),
             );
         }
 
@@ -274,7 +275,7 @@ export class PayPalProvider implements PaymentProvider {
     private async fetchSubscriptionDetails(externalSubscriptionReference: string,): Promise<PayPalSubscriptionDetailsResponse> {
         if (!externalSubscriptionReference?.trim()) {
             throw new BadRequestException(
-                'La referencia externa de la suscripción es obligatoria.',
+                localizedError('VALIDATION_REFERENCE_REQUIRED'),
             );
         }
 
@@ -300,7 +301,7 @@ export class PayPalProvider implements PaymentProvider {
 
             if (response.status === 404) {
                 throw new NotFoundException(
-                    'La suscripción no existe en el proveedor de pagos.',
+                    localizedError('SUBSCRIPTION_PROVIDER_NOT_FOUND'),
                 );
             }
 
@@ -323,7 +324,7 @@ export class PayPalProvider implements PaymentProvider {
                 result.plan_id !== envs.payments.planId
             ) {
                 throw new BadRequestException(
-                    'La suscripción no corresponde al plan configurado.',
+                    localizedError('SUBSCRIPTION_PROVIDER_PLAN_MISMATCH'),
                 );
             }
 
@@ -343,7 +344,7 @@ export class PayPalProvider implements PaymentProvider {
             );
 
             throw new ServiceUnavailableException(
-                'No fue posible consultar la suscripción.',
+                localizedError('SUBSCRIPTION_QUERY_FAILED'),
             );
         }
     }
@@ -418,7 +419,7 @@ export class PayPalProvider implements PaymentProvider {
             );
 
             throw new ServiceUnavailableException(
-                'El servicio de pagos no está disponible.',
+                localizedError('SUBSCRIPTION_PAYMENT_SERVICE_UNAVAILABLE'),
             );
         }
     }
@@ -538,7 +539,7 @@ export class PayPalProvider implements PaymentProvider {
             );
 
             throw new ServiceUnavailableException(
-                'No fue posible verificar la notificación de pago.',
+                localizedError('SUBSCRIPTION_WEBHOOK_VERIFICATION_FAILED'),
             );
         }
     }

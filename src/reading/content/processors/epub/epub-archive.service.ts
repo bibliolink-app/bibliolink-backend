@@ -1,4 +1,5 @@
 import { Injectable, UnprocessableEntityException } from '@nestjs/common';
+import { localizedError } from '../../../../i18n/localized-error';
 import yauzl, { type Entry, type ZipFile } from 'yauzl';
 
 import { envs } from '../../../../config/envs';
@@ -27,7 +28,7 @@ export class EpubArchiveService {
                     if (error || !zipFile) {
                         reject(
                             new UnprocessableEntityException(
-                                'El contenido no corresponde a un EPUB válido.',
+                                localizedError('READING_EPUB_INVALID'),
                             ),
                         );
                         return;
@@ -55,7 +56,7 @@ export class EpubArchiveService {
                 if (entry.uncompressedSize > envs.reading.contentMaxBytes) {
                     reject(
                         new UnprocessableEntityException(
-                            'El archivo interno del EPUB excede el tamaño permitido.',
+                            localizedError('READING_EPUB_ENTRY_TOO_LARGE'),
                         ),
                     );
                     return;
@@ -65,7 +66,7 @@ export class EpubArchiveService {
                     if (error || !stream) {
                         reject(
                             new UnprocessableEntityException(
-                                'No fue posible leer el contenido interno del EPUB.',
+                                localizedError('READING_EPUB_ENTRY_READ_FAILED'),
                             ),
                         );
                         return;
@@ -80,7 +81,7 @@ export class EpubArchiveService {
                         if (totalBytes > envs.reading.contentMaxBytes) {
                             reject(
                                 new UnprocessableEntityException(
-                                    'El archivo interno del EPUB excede el tamaño permitido.',
+                                    localizedError('READING_EPUB_ENTRY_TOO_LARGE'),
                                 ),
                             );
 
@@ -98,7 +99,7 @@ export class EpubArchiveService {
                     stream.on('error', () => {
                         reject(
                             new UnprocessableEntityException(
-                                'No fue posible leer el contenido interno del EPUB.',
+                                localizedError('READING_EPUB_ENTRY_READ_FAILED'),
                             ),
                         );
                     });
@@ -108,7 +109,7 @@ export class EpubArchiveService {
             zipFile.on('end', () => {
                 reject(
                     new UnprocessableEntityException(
-                        `No se encontró ${entryName} dentro del EPUB.`,
+                        localizedError('READING_EPUB_ENTRY_NOT_FOUND', { entryName }),
                     ),
                 );
             });
@@ -116,7 +117,7 @@ export class EpubArchiveService {
             zipFile.on('error', () => {
                 reject(
                     new UnprocessableEntityException(
-                        'No fue posible procesar la estructura interna del EPUB.',
+                        localizedError('READING_EPUB_STRUCTURE_PROCESSING_FAILED'),
                     ),
                 );
             });

@@ -8,6 +8,7 @@ import type { Request } from 'express';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 
 import { envs } from '../../config/envs';
+import { localizedError } from '../../i18n/localized-error';
 import type { UserListItemResponseDto } from '../../users/dto/user-list-item-response.dto';
 import { UserStatus } from '../../users/enums/user-status.enum';
 import { UsersService } from '../../users/users.service';
@@ -42,7 +43,7 @@ export class RefreshJwtStrategy extends PassportStrategy(
             !/^[1-9]\d*$/.test(payload.sub) ||
             !Number.isSafeInteger(Number(payload.sub))
         ) {
-            throw new UnauthorizedException();
+            throw new UnauthorizedException(localizedError('AUTH_UNAUTHORIZED'));
         }
 
         let user: UserListItemResponseDto;
@@ -51,14 +52,14 @@ export class RefreshJwtStrategy extends PassportStrategy(
             user = await this.usersService.findById(Number(payload.sub));
         } catch (error: unknown) {
             if (error instanceof NotFoundException) {
-                throw new UnauthorizedException();
+                throw new UnauthorizedException(localizedError('AUTH_UNAUTHORIZED'));
             }
 
             throw error;
         }
 
         if (user.status !== UserStatus.ACTIVE) {
-            throw new UnauthorizedException();
+            throw new UnauthorizedException(localizedError('AUTH_UNAUTHORIZED'));
         }
 
         return {

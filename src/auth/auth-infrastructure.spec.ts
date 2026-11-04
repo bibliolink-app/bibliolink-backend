@@ -1,5 +1,5 @@
 import 'reflect-metadata';
-import { NotFoundException, UnauthorizedException } from '@nestjs/common';
+import { ForbiddenException, NotFoundException, UnauthorizedException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { ExecutionContextHost } from '@nestjs/core/helpers/execution-context-host';
 import { JwtService } from '@nestjs/jwt';
@@ -30,6 +30,7 @@ import { RefreshJwtStrategy } from './strategies/refresh-jwt.strategy';
 
 const testEnvs = vi.hoisted(() => ({
     isProduction: false,
+    cookies: { authMaxAge: 900000, refreshMaxAge: 604800000 },
     jwt: {
         access: {
             secret: 'test-access-secret-at-least-32-characters',
@@ -207,21 +208,21 @@ describe('RolesGuard', () => {
 
     it('enforces class roles and method overrides without granting ADMIN USER-only access', () => {
         const admin = { ...user, role: UserRole.ADMIN };
-        expect(guard.canActivate(contextFor({ user }))).toBe(false);
+        expect(() => guard.canActivate(contextFor({ user }))).toThrow(ForbiddenException);
         expect(guard.canActivate(contextFor({ user: admin }))).toBe(true);
         expect(
             guard.canActivate(
                 contextFor({ user }, ProtectedController.prototype.reader),
             ),
         ).toBe(true);
-        expect(
+        expect(() =>
             guard.canActivate(
                 contextFor(
                     { user: admin },
                     ProtectedController.prototype.reader,
                 ),
             ),
-        ).toBe(false);
+        ).toThrow(ForbiddenException);
     });
 
     it('rejects unauthenticated requests when a role is required', () => {
@@ -232,6 +233,7 @@ describe('RolesGuard', () => {
 });
 
 describe('AuthCookieService', () => {
+    beforeEach(() => { testEnvs.isProduction = false; });
     it.each([false, true])(
         'sets HttpOnly cookies with correct paths, TTLs and Secure=%s',
         (production) => {
@@ -246,7 +248,7 @@ describe('AuthCookieService', () => {
                 {
                     httpOnly: true,
                     secure: production,
-                    sameSite: 'lax',
+                    sameSite: production ? 'none' : 'lax',
                     path: '/',
                     maxAge: 900000,
                 },
@@ -257,7 +259,7 @@ describe('AuthCookieService', () => {
                 {
                     httpOnly: true,
                     secure: production,
-                    sameSite: 'lax',
+                    sameSite: production ? 'none' : 'lax',
                     path: '/auth/refresh',
                     maxAge: 604800000,
                 },

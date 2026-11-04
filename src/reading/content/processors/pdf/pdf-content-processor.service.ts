@@ -1,4 +1,5 @@
 import { Injectable, UnprocessableEntityException } from '@nestjs/common';
+import { localizedError } from '../../../../i18n/localized-error';
 
 import { ReadingPageResponseDto } from '../../../dto/reading-page-response.dto';
 import { ReadingContentType } from '../../../enums/reading-content-type.enum';
@@ -22,7 +23,7 @@ interface PdfCanvasFactory {
 export class PdfContentProcessorService {
     async process(pdf: Buffer, pageNumber: number): Promise<ReadingPageResponseDto> {
         if (pageNumber < 1) {
-            throw new UnprocessableEntityException('El número de página debe ser mayor o igual a 1.');
+            throw new UnprocessableEntityException(localizedError('VALIDATION_PAGE_MIN', { min: 1 }));
         }
 
         const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
@@ -32,7 +33,7 @@ export class PdfContentProcessorService {
             const document = await loadingTask.promise;
 
             if (pageNumber > document.numPages) {
-                throw new UnprocessableEntityException('La página solicitada no existe.');
+                throw new UnprocessableEntityException(localizedError('READING_PAGE_NOT_FOUND'));
             }
 
             const page = await document.getPage(pageNumber);
@@ -47,7 +48,7 @@ export class PdfContentProcessorService {
                 const canvasFactory = document.canvasFactory;
 
                 if (!this.isPdfCanvasFactory(canvasFactory)) {
-                    throw new UnprocessableEntityException('No fue posible inicializar el renderizador PDF.');
+                    throw new UnprocessableEntityException(localizedError('READING_PDF_RENDERER_UNAVAILABLE'));
                 }
 
                 const canvasAndContext = canvasFactory.create(width, height);
@@ -76,7 +77,7 @@ export class PdfContentProcessorService {
                 throw error;
             }
 
-            throw new UnprocessableEntityException('No fue posible procesar el contenido PDF.');
+            throw new UnprocessableEntityException(localizedError('READING_PDF_PROCESSING_FAILED'));
         } finally {
             await loadingTask.destroy();
         }
@@ -101,7 +102,7 @@ export class PdfContentProcessorService {
         const exceedsArea = width * height > PDF_MAX_CANVAS_PIXELS;
 
         if (exceedsDimension || exceedsArea) {
-            throw new UnprocessableEntityException('La página PDF excede las dimensiones permitidas.');
+            throw new UnprocessableEntityException(localizedError('READING_PDF_PAGE_DIMENSIONS_EXCEEDED'));
         }
     }
 }

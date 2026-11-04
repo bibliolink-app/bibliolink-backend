@@ -1,5 +1,9 @@
-import { Body, Controller, Get, Param, ParseIntPipe, Patch, Post, UseGuards, } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, UseGuards, } from '@nestjs/common';
 
+import type { Language } from '../i18n/i18n.constants';
+import { localizedParseIntPipe } from '../i18n/localized-pipes';
+import { RequestLanguage } from '../i18n/request-language.decorator';
+import { translate } from '../i18n/translate';
 import { CreateAdminDto } from './dto/create-admin.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { UserListItemResponseDto } from './dto/user-list-item-response.dto';
@@ -45,40 +49,46 @@ export class UsersController {
     @Get(':userId')
     @Roles(UserRole.ADMIN)
     findById(
-        @Param('userId', ParseIntPipe) userId: number,
+        @Param('userId', localizedParseIntPipe('VALIDATION_USER_ID_INTEGER')) userId: number,
     ): Promise<UserListItemResponseDto> {
         return this.usersService.findById(userId);
     }
 
     @Patch(':userId')
     @Roles(UserRole.ADMIN)
-    update(
-        @Param('userId', ParseIntPipe) userId: number,
+    async update(
+        @Param('userId', localizedParseIntPipe('VALIDATION_USER_ID_INTEGER')) userId: number,
         @Body() updateUserDto: UpdateUserDto,
+        @RequestLanguage() language: Language,
     ): Promise<{ message: string }> {
-        return this.usersService.update(
+        await this.usersService.update(
             userId,
             updateUserDto,
         );
+        return { message: translate('USER_UPDATED', language) };
     }
 
     @Patch(':userId/enable')
     @Roles(UserRole.ADMIN)
-    enableUser(
-        @Param('userId', ParseIntPipe) userId: number,
+    async enableUser(
+        @Param('userId', localizedParseIntPipe('VALIDATION_USER_ID_INTEGER')) userId: number,
+        @RequestLanguage() language: Language,
     ): Promise<{ message: string }> {
-        return this.usersService.enableUser(userId);
+        await this.usersService.enableUser(userId);
+        return { message: translate('USER_ENABLED', language) };
     }
 
     @Patch(':userId/disable')
     @Roles(UserRole.ADMIN)
-    disableUser(
+    async disableUser(
         @CurrentUser() currentUser: AuthenticatedUser,
-        @Param('userId', ParseIntPipe) targetUserId: number,
+        @Param('userId', localizedParseIntPipe('VALIDATION_USER_ID_INTEGER')) targetUserId: number,
+        @RequestLanguage() language: Language,
     ): Promise<{ message: string }> {
-        return this.usersService.disableUser(
+        await this.usersService.disableUser(
             currentUser.userId,
             targetUserId,
         );
+        return { message: translate('USER_DISABLED', language) };
     }
 }

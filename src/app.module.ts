@@ -1,10 +1,11 @@
 import { Module } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
-import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
+import { ThrottlerModule } from '@nestjs/throttler';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { LoggerModule } from 'nestjs-pino';
 
 import { envs } from './config/envs';
+import { LocalizedThrottlerGuard } from './common/guards/localized-throttler.guard';
 import { throttlingConfig } from './config/throttling.config';
 import { loggingConfig } from './config/logging.config';
 import { EmailModule } from './email/email.module';
@@ -54,7 +55,7 @@ import { CategoriesModule } from './categories/categories.module';
     providers: [
         {
             provide: APP_GUARD,
-            useClass: ThrottlerGuard,
+            useClass: LocalizedThrottlerGuard,
         },
     ],
 })

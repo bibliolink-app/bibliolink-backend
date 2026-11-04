@@ -1,0 +1,17 @@
+{
+    "EMAIL_PASSWORD_RESET_SUBJECT": "Redefina sua senha do BiblioLink",
+    "EMAIL_PASSWORD_RESET_PREHEADER": "Redefina com segurança a senha da sua conta do BiblioLink.",
+    "EMAIL_PASSWORD_RESET_TITLE": "Recuperação de senha",
+    "EMAIL_PASSWORD_RESET_GREETING": "Olá",
+    "EMAIL_PASSWORD_RESET_INTRO": "Recebemos uma solicitação para redefinir a senha da sua conta no BiblioLink.",
+    "EMAIL_PASSWORD_RESET_ACTION": "Redefinir senha",
+    "EMAIL_PASSWORD_RESET_SECURITY_TITLE": "Informações de segurança",
+    "EMAIL_PASSWORD_RESET_SECURITY_NOTICE": "Este link ficará disponível por tempo limitado e é exclusivo da sua conta. Não o compartilhe com outras pessoas.",
+    "EMAIL_PASSWORD_RESET_IGNORE_NOTICE": "Se você não solicitou esta alteração, pode ignorar este e-mail. Sua senha atual continuará válida.",
+    "EMAIL_PASSWORD_RESET_LINK_HELP": "Se o botão não funcionar, copie e cole o seguinte link no seu navegador:",
+    "EMAIL_BRAND_TAGLINE": "Histórias que conectam você",
+    "EMAIL_BRAND_CLOSING": "Conecte-se à sua próxima história.",
+    "EMAIL_RIGHTS_RESERVED": "Todos os direitos reservados.",
+    "EMAIL_AUTOMATED_NOTICE": "Este é um e-mail automático. Por favor, não responda a esta mensagem.",
+    "EMAIL_SECURITY_FOOTER": "Esta mensagem foi enviada pelo BiblioLink como parte de um processo de segurança da sua conta."
+}

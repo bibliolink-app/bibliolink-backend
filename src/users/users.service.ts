@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import type { EntityManager } from 'typeorm';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 
+import { localizedError } from '../i18n/localized-error';
 import { PasswordHasherService } from '../common/security/password-hasher.service';
 
 import { CreateAdminDto } from './dto/create-admin.dto';
@@ -120,7 +121,7 @@ export class UsersService {
             if (isMySqlUniqueViolation(error)) {
                 this.logger.warn('User creation rejected: duplicate account details');
                 throw new ConflictException(
-                    'El nombre de usuario o el correo electrónico ya está registrado.',
+                    localizedError('USER_ACCOUNT_ALREADY_REGISTERED'),
                 );
             }
             throw error;
@@ -139,7 +140,7 @@ export class UsersService {
 
         if (existingEmail) {
             this.logger.warn('Administrator creation rejected: duplicate email');
-            throw new ConflictException('Ya existe un usuario con este correo electrónico.',);
+            throw new ConflictException(localizedError('USER_EMAIL_ALREADY_EXISTS'),);
         }
 
         const existingUsername = await this.usersRepository
@@ -152,7 +153,7 @@ export class UsersService {
 
         if (existingUsername) {
             this.logger.warn('Administrator creation rejected: duplicate username');
-            throw new ConflictException('Ya existe un usuario con este nombre de usuario.',);
+            throw new ConflictException(localizedError('USER_USERNAME_ALREADY_EXISTS'),);
         }
 
         const passwordHash = await this.passwordHasher.hash(
@@ -196,7 +197,7 @@ export class UsersService {
 
         if (!user) {
             this.logger.warn({ userId }, 'Profile lookup rejected: user not found');
-            throw new NotFoundException('El usuario no existe.',);
+            throw new NotFoundException(localizedError('USER_NOT_FOUND'),);
         }
 
         this.logger.info({ userId }, 'User profile retrieved');
@@ -261,14 +262,14 @@ export class UsersService {
         if (!user) {
             this.logger.warn({ userId }, 'User lookup rejected: user not found');
             throw new NotFoundException(
-                'El usuario no existe.',
+                localizedError('USER_NOT_FOUND'),
             );
         }
 
         return this.toResponseDto(user);
     }
 
-    async update(userId: number, updateUserDto: UpdateUserDto,): Promise<{ message: string }> {
+    async update(userId: number, updateUserDto: UpdateUserDto,): Promise<void> {
         this.logger.debug({ userId }, 'Updating user');
         const user = await this.usersRepository
             .createQueryBuilder('user')
@@ -277,7 +278,7 @@ export class UsersService {
 
         if (!user) {
             this.logger.warn({ userId }, 'User update rejected: user not found');
-            throw new NotFoundException('El usuario no existe.',);
+            throw new NotFoundException(localizedError('USER_NOT_FOUND'),);
         }
 
         if (updateUserDto.email !== undefined && updateUserDto.email !== user.email) {
@@ -292,7 +293,7 @@ export class UsersService {
 
             if (existingEmail) {
                 this.logger.warn({ userId }, 'User update rejected: duplicate email');
-                throw new ConflictException('Ya existe un usuario con este correo electrónico.',);
+                throw new ConflictException(localizedError('USER_EMAIL_ALREADY_EXISTS'),);
             }
 
             user.email = updateUserDto.email;
@@ -311,7 +312,7 @@ export class UsersService {
             if (existingUsername) {
                 this.logger.warn({ userId }, 'User update rejected: duplicate username');
                 throw new ConflictException(
-                    'Ya existe un usuario con este nombre de usuario.',
+                    localizedError('USER_USERNAME_ALREADY_EXISTS'),
                 );
             }
 
@@ -341,17 +342,14 @@ export class UsersService {
         await this.usersRepository.save(user);
 
         this.logger.info({ userId }, 'User updated successfully');
-        return {
-            message: 'Usuario actualizado correctamente.',
-        };
     }
 
-    async disableUser(requesterUserId: number, targetUserId: number,): Promise<{ message: string }> {
+    async disableUser(requesterUserId: number, targetUserId: number,): Promise<void> {
         this.logger.debug({ requesterUserId, targetUserId }, 'Disabling user');
         if (requesterUserId === targetUserId) {
             this.logger.warn({ requesterUserId, targetUserId }, 'User disable rejected: self-deactivation');
             throw new BadRequestException(
-                'No puedes deshabilitar tu propia cuenta.',
+                localizedError('USER_SELF_DEACTIVATION_FORBIDDEN'),
             );
         }
 
@@ -364,12 +362,12 @@ export class UsersService {
 
         if (!user) {
             this.logger.warn({ requesterUserId, targetUserId }, 'User disable rejected: user not found');
-            throw new NotFoundException('El usuario no existe.',);
+            throw new NotFoundException(localizedError('USER_NOT_FOUND'),);
         }
 
         if (user.status !== UserStatus.ACTIVE) {
             this.logger.warn({ requesterUserId, targetUserId }, 'User disable rejected: user already inactive');
-            throw new ConflictException('El usuario ya se encuentra inactivo.',);
+            throw new ConflictException(localizedError('USER_ALREADY_INACTIVE'),);
         }
 
         user.status = UserStatus.INACTIVE;
@@ -377,12 +375,9 @@ export class UsersService {
         await this.usersRepository.save(user);
 
         this.logger.info({ requesterUserId, targetUserId }, 'User disabled successfully');
-        return {
-            message: 'Usuario deshabilitado correctamente.',
-        };
     }
 
-    async enableUser(targetUserId: number,): Promise<{ message: string }> {
+    async enableUser(targetUserId: number,): Promise<void> {
         this.logger.debug({ targetUserId }, 'Enabling user');
         const user = await this.usersRepository
             .createQueryBuilder('user')
@@ -393,12 +388,12 @@ export class UsersService {
 
         if (!user) {
             this.logger.warn({ targetUserId }, 'User enable rejected: user not found');
-            throw new NotFoundException('El usuario no existe.',);
+            throw new NotFoundException(localizedError('USER_NOT_FOUND'),);
         }
 
         if (user.status !== UserStatus.INACTIVE) {
             this.logger.warn({ targetUserId }, 'User enable rejected: user already active');
-            throw new ConflictException('El usuario ya se encuentra activo.',);
+            throw new ConflictException(localizedError('USER_ALREADY_ACTIVE'),);
         }
 
         user.status = UserStatus.ACTIVE;
@@ -406,9 +401,6 @@ export class UsersService {
         await this.usersRepository.save(user);
 
         this.logger.info({ targetUserId }, 'User enabled successfully');
-        return {
-            message: 'Usuario habilitado correctamente.',
-        };
     }
 
     private toResponseDto(user: User,): UserListItemResponseDto {

@@ -1,0 +1,13 @@
+{
+    "USER_ACCOUNT_ALREADY_REGISTERED": "Le nom d'utilisateur ou l'adresse e-mail est déjà enregistré.",
+    "USER_EMAIL_ALREADY_EXISTS": "Un utilisateur avec cette adresse e-mail existe déjà.",
+    "USER_USERNAME_ALREADY_EXISTS": "Un utilisateur avec ce nom d'utilisateur existe déjà.",
+    "USER_NOT_FOUND": "L'utilisateur n'existe pas.",
+    "USER_SELF_DEACTIVATION_FORBIDDEN": "Vous ne pouvez pas désactiver votre propre compte.",
+    "USER_ALREADY_INACTIVE": "L'utilisateur est déjà inactif.",
+    "USER_ALREADY_ACTIVE": "L'utilisateur est déjà actif.",
+    "USER_UPDATED": "Utilisateur mis à jour avec succès.",
+    "USER_DISABLED": "Utilisateur désactivé avec succès.",
+    "USER_ENABLED": "Utilisateur activé avec succès.",
+    "VALIDATION_USER_ID_INTEGER": "L'identifiant de l'utilisateur doit être un nombre entier."
+}

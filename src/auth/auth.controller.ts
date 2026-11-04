@@ -2,6 +2,9 @@ import { Body, Controller, Get, Header, HttpCode, HttpStatus, Patch, Post, Res, 
 import { Throttle } from '@nestjs/throttler';
 import type { Response } from 'express';
 
+import type { Language } from '../i18n/i18n.constants';
+import { RequestLanguage } from '../i18n/request-language.decorator';
+import { translate } from '../i18n/translate';
 import { envs } from '../config/envs';
 import { AuthService } from './auth.service';
 import { AuthCookieService } from './cookies/auth-cookie.service';
@@ -25,15 +28,16 @@ export class AuthController {
 
     @Post('register')
     @Throttle({ default: envs.throttling.register })
-    register(@Body() registerDto: RegisterDto,): Promise<{ message: string }> {
-        return this.authService.register(registerDto);
+    async register(@Body() registerDto: RegisterDto, @RequestLanguage() language: Language): Promise<{ message: string }> {
+        await this.authService.register(registerDto);
+        return { message: translate('AUTH_REGISTERED', language) };
     }
 
     @Post('login')
     @HttpCode(HttpStatus.OK)
     @Header('Cache-Control', 'no-store')
     @Throttle({ default: envs.throttling.login })
-    async login( @Body() loginDto: LoginDto, @Res({ passthrough: true }) response: Response, ): Promise<{ message: string }> {
+    async login( @Body() loginDto: LoginDto, @Res({ passthrough: true }) response: Response, @RequestLanguage() language: Language, ): Promise<{ message: string }> {
         const tokens = await this.authService.login(loginDto);
 
         this.authCookieService.setAccessToken(
@@ -47,7 +51,7 @@ export class AuthController {
         );
 
         return {
-            message: 'Sesión iniciada correctamente.',
+            message: translate('AUTH_LOGGED_IN', language),
         };
     }
 
@@ -55,7 +59,7 @@ export class AuthController {
     @HttpCode(HttpStatus.OK)
     @Header('Cache-Control', 'no-store')
     @UseGuards(RefreshJwtAuthGuard)
-    async refresh( @CurrentUser() currentUser: AuthenticatedUser, @Res({ passthrough: true }) response: Response, ): Promise<{ message: string }> {
+    async refresh( @CurrentUser() currentUser: AuthenticatedUser, @Res({ passthrough: true }) response: Response, @RequestLanguage() language: Language, ): Promise<{ message: string }> {
         const tokens = await this.authService.refresh(
             currentUser.userId,
         );
@@ -71,18 +75,18 @@ export class AuthController {
         );
 
         return {
-            message: 'Autenticación renovada correctamente.',
+            message: translate('AUTH_REFRESHED', language),
         };
     }
 
     @Post('logout')
     @HttpCode(HttpStatus.OK)
     @Header('Cache-Control', 'no-store')
-    logout(@Res({ passthrough: true }) response: Response,): { message: string } {
+    logout(@Res({ passthrough: true }) response: Response, @RequestLanguage() language: Language,): { message: string } {
         this.authCookieService.clearTokens(response);
 
         return {
-            message: 'Sesión cerrada correctamente.',
+            message: translate('AUTH_LOGGED_OUT', language),
         };
     }
 
@@ -101,29 +105,33 @@ export class AuthController {
     @HttpCode(HttpStatus.OK)
     @Header('Cache-Control', 'no-store')
     @Throttle({default: envs.throttling.forgotPassword,})
-    forgotPassword( @Body() forgotPasswordDto: ForgotPasswordDto, ): Promise<{ message: string }> {
-        return this.authService.forgotPassword(
+    async forgotPassword( @Body() forgotPasswordDto: ForgotPasswordDto, @RequestLanguage() language: Language, ): Promise<{ message: string }> {
+        await this.authService.forgotPassword(
             forgotPasswordDto,
+            language,
         );
+        return { message: translate('AUTH_PASSWORD_RESET_REQUESTED', language) };
     }
 
     @Post('reset-password')
     @HttpCode(HttpStatus.OK)
     @Header('Cache-Control', 'no-store')
     @Throttle({default: envs.throttling.resetPassword,})
-    resetPassword( @Body() resetPasswordDto: ResetPasswordDto, ): Promise<{ message: string }> {
-        return this.authService.resetPassword(
+    async resetPassword( @Body() resetPasswordDto: ResetPasswordDto, @RequestLanguage() language: Language, ): Promise<{ message: string }> {
+        await this.authService.resetPassword(
             resetPasswordDto,
         );
+        return { message: translate('AUTH_PASSWORD_RESET', language) };
     }
 
     @Patch('change-password')
     @Header('Cache-Control', 'no-store')
     @UseGuards(JwtAuthGuard)
-    changePassword( @CurrentUser() currentUser: AuthenticatedUser, @Body() changePasswordDto: ChangePasswordDto, ): Promise<{ message: string }> {
-        return this.authService.changePassword(
+    async changePassword( @CurrentUser() currentUser: AuthenticatedUser, @Body() changePasswordDto: ChangePasswordDto, @RequestLanguage() language: Language, ): Promise<{ message: string }> {
+        await this.authService.changePassword(
             currentUser.userId,
             changePasswordDto,
         );
+        return { message: translate('AUTH_PASSWORD_CHANGED', language) };
     }
 }

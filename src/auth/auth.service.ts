@@ -12,6 +12,8 @@ import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 
 import { CaptchaService } from '../captcha/captcha.service';
 import { PasswordHasherService } from '../common/security/password-hasher.service';
+import { localizedError } from '../i18n/localized-error';
+import type { Language } from '../i18n/i18n.constants';
 import { envs } from '../config/envs';
 import { EmailService } from '../email/email.service';
 import { UserStatus } from '../users/enums/user-status.enum';
@@ -39,7 +41,7 @@ export class AuthService {
         private readonly passwordResetTokensRepository: Repository<PasswordResetToken>,
     ) {}
 
-    async register( registerDto: RegisterDto, ): Promise<{ message: string }> {
+    async register( registerDto: RegisterDto, ): Promise<void> {
         this.logger.debug('Processing user registration');
         const captchaIsValid = await this.captchaService.verify(
             registerDto.captchaToken,
@@ -48,7 +50,7 @@ export class AuthService {
         if (!captchaIsValid) {
             this.logger.warn('Registration rejected by CAPTCHA');
             throw new BadRequestException(
-                'La verificación CAPTCHA no fue válida.',
+                localizedError('AUTH_CAPTCHA_INVALID'),
             );
         }
 
@@ -59,7 +61,7 @@ export class AuthService {
         if (existingUsername) {
             this.logger.warn('Registration rejected: username already registered');
             throw new ConflictException(
-                'El nombre de usuario ya está registrado.',
+                localizedError('AUTH_USERNAME_ALREADY_REGISTERED'),
             );
         }
 
@@ -70,7 +72,7 @@ export class AuthService {
         if (existingEmail) {
             this.logger.warn('Registration rejected: email already registered');
             throw new ConflictException(
-                'El correo electrónico ya está registrado.',
+                localizedError('AUTH_EMAIL_ALREADY_REGISTERED'),
             );
         }
 
@@ -90,9 +92,6 @@ export class AuthService {
         });
 
         this.logger.info('User registration completed');
-        return {
-            message: 'Usuario registrado correctamente.',
-        };
     }
 
     async login(loginDto: LoginDto,): Promise<{ accessToken: string; refreshToken: string }> {
@@ -104,7 +103,7 @@ export class AuthService {
         if (!user || user.status !== UserStatus.ACTIVE) {
             this.logger.warn('Login rejected: account unavailable');
             throw new UnauthorizedException(
-                'Credenciales incorrectas.',
+                localizedError('AUTH_INVALID_CREDENTIALS'),
             );
         }
 
@@ -116,7 +115,7 @@ export class AuthService {
         if (!passwordMatches) {
             this.logger.warn('Login rejected: invalid credentials');
             throw new UnauthorizedException(
-                'Credenciales incorrectas.',
+                localizedError('AUTH_INVALID_CREDENTIALS'),
             );
         }
 
@@ -132,12 +131,8 @@ export class AuthService {
         return tokens;
     }
 
-    async forgotPassword(forgotPasswordDto: ForgotPasswordDto,): Promise<{ message: string }> {
+    async forgotPassword(forgotPasswordDto: ForgotPasswordDto, language: Language): Promise<void> {
         this.logger.debug('Processing password recovery request');
-        const response = {
-            message:
-                'Si existe una cuenta asociada al correo electrónico, se enviarán instrucciones para restablecer la contraseña.',
-        };
 
         const user = await this.usersService.findByEmail(
             forgotPasswordDto.email,
@@ -145,7 +140,7 @@ export class AuthService {
 
         if (!user || user.status !== UserStatus.ACTIVE) {
             this.logger.info('Password recovery request processed');
-            return response;
+            return;
         }
 
         const token = randomBytes(32).toString('hex');
@@ -187,6 +182,7 @@ export class AuthService {
                 user.email,
                 user.firstName,
                 resetUrl,
+                language,
             );
         } catch (error: unknown) {
             this.logger.error(
@@ -196,10 +192,10 @@ export class AuthService {
         }
 
         this.logger.info('Password recovery request processed');
-        return response;
+        return;
     }
 
-    async resetPassword( resetPasswordDto: ResetPasswordDto, ): Promise<{ message: string }> {
+    async resetPassword( resetPasswordDto: ResetPasswordDto, ): Promise<void> {
         this.logger.debug('Processing password reset');
         const tokenHash = this.hashPasswordResetToken(
             resetPasswordDto.token,
@@ -230,7 +226,7 @@ export class AuthService {
                 ) {
                     this.logger.warn('Password reset rejected: invalid or expired recovery link');
                     throw new BadRequestException(
-                        'El enlace de recuperación es inválido o ha expirado.',
+                        localizedError('AUTH_PASSWORD_RESET_INVALID'),
                     );
                 }
 
@@ -244,7 +240,7 @@ export class AuthService {
                 if (!updated) {
                     this.logger.warn('Password reset rejected: invalid or expired recovery link');
                     throw new BadRequestException(
-                        'El enlace de recuperación es inválido o ha expirado.',
+                        localizedError('AUTH_PASSWORD_RESET_INVALID'),
                     );
                 }
 
@@ -256,12 +252,9 @@ export class AuthService {
         );
 
         this.logger.info({ userId }, 'Password reset completed successfully');
-        return {
-            message: 'Contraseña restablecida correctamente.',
-        };
     }
 
-    async changePassword( userId: number, changePasswordDto: ChangePasswordDto, ): Promise<{ message: string }> {
+    async changePassword( userId: number, changePasswordDto: ChangePasswordDto, ): Promise<void> {
         this.logger.debug({ userId }, 'Processing password change');
         const user =
             await this.usersService.findByIdWithPassword(userId);
@@ -269,7 +262,7 @@ export class AuthService {
         if (!user || user.status !== UserStatus.ACTIVE) {
             this.logger.warn({ userId }, 'Password change rejected: account unavailable');
             throw new UnauthorizedException(
-                'No autorizado.',
+                localizedError('AUTH_UNAUTHORIZED'),
             );
         }
 
@@ -282,7 +275,7 @@ export class AuthService {
         if (!currentPasswordMatches) {
             this.logger.warn({ userId }, 'Password change rejected: incorrect current password');
             throw new BadRequestException(
-                'La contraseña actual es incorrecta.',
+                localizedError('AUTH_CURRENT_PASSWORD_INCORRECT'),
             );
         }
 
@@ -295,7 +288,7 @@ export class AuthService {
         if (newPasswordMatches) {
             this.logger.warn({ userId }, 'Password change rejected: password reuse');
             throw new BadRequestException(
-                'La nueva contraseña debe ser diferente de la actual.',
+                localizedError('AUTH_PASSWORD_REUSE'),
             );
         }
 
@@ -311,14 +304,11 @@ export class AuthService {
         if (!updated) {
             this.logger.warn({ userId }, 'Password change rejected: account unavailable');
             throw new UnauthorizedException(
-                'No autorizado.',
+                localizedError('AUTH_UNAUTHORIZED'),
             );
         }
 
         this.logger.info({ userId }, 'Password changed successfully');
-        return {
-            message: 'Contraseña actualizada correctamente.',
-        };
     }
 
     private hashPasswordResetToken(token: string): string {

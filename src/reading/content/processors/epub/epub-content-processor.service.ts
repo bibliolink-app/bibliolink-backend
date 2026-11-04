@@ -1,4 +1,5 @@
 import { Injectable, UnprocessableEntityException } from '@nestjs/common';
+import { localizedError } from '../../../../i18n/localized-error';
 import { posix } from 'node:path';
 import { XMLParser } from 'fast-xml-parser';
 
@@ -32,7 +33,7 @@ export class EpubContentProcessorService {
 
     async process(epub: Buffer, pageNumber: number): Promise<ReadingPageResponseDto> {
         if (pageNumber < 1) {
-            throw new UnprocessableEntityException('El número de página debe ser mayor o igual a 1.');
+            throw new UnprocessableEntityException(localizedError('VALIDATION_PAGE_MIN', { min: 1 }));
         }
 
         const packagePath = await this.getPackagePath(epub);
@@ -40,7 +41,7 @@ export class EpubContentProcessorService {
         const chapterPath = readingOrder[pageNumber - 1];
 
         if (!chapterPath) {
-            throw new UnprocessableEntityException('La página solicitada no existe.');
+            throw new UnprocessableEntityException(localizedError('READING_PAGE_NOT_FOUND'));
         }
 
         const chapter = await this.epubArchiveService.readEntry(epub, chapterPath);
@@ -84,7 +85,7 @@ export class EpubContentProcessorService {
         }
 
         throw new UnprocessableEntityException(
-            'El EPUB no contiene una referencia válida a su paquete principal.',
+            localizedError('READING_EPUB_PACKAGE_REFERENCE_INVALID'),
         );
     }
 
@@ -108,7 +109,7 @@ export class EpubContentProcessorService {
 
         if (!manifest || !spine) {
             throw new UnprocessableEntityException(
-                'El EPUB no contiene una estructura de lectura válida.',
+                localizedError('READING_EPUB_READING_STRUCTURE_INVALID'),
             );
         }
 
@@ -131,7 +132,7 @@ export class EpubContentProcessorService {
 
             if (typeof idref !== 'string') {
                 throw new UnprocessableEntityException(
-                    'El EPUB contiene una referencia de lectura inválida.',
+                    localizedError('READING_EPUB_READING_REFERENCE_INVALID'),
                 );
             }
 
@@ -139,7 +140,7 @@ export class EpubContentProcessorService {
 
             if (!item) {
                 throw new UnprocessableEntityException(
-                    'El EPUB contiene una referencia a un recurso inexistente.',
+                    localizedError('READING_EPUB_RESOURCE_NOT_FOUND'),
                 );
             }
 
@@ -160,7 +161,7 @@ export class EpubContentProcessorService {
 
         if (readingOrder.length === 0) {
             throw new UnprocessableEntityException(
-                'El EPUB no contiene capítulos compatibles con el lector.',
+                localizedError('READING_EPUB_CHAPTERS_UNSUPPORTED'),
             );
         }
 
@@ -211,13 +212,13 @@ export class EpubContentProcessorService {
 
         if (!rawPath) {
             throw new UnprocessableEntityException(
-                'El EPUB contiene una referencia interna inválida.',
+                localizedError('READING_EPUB_INTERNAL_REFERENCE_INVALID'),
             );
         }
 
         if (/^[a-z][a-z0-9+.-]*:/i.test(rawPath) || rawPath.startsWith('//')) {
             throw new UnprocessableEntityException(
-                'El EPUB contiene una referencia externa no permitida.',
+                localizedError('READING_EPUB_EXTERNAL_REFERENCE_NOT_ALLOWED'),
             );
         }
 
@@ -227,7 +228,7 @@ export class EpubContentProcessorService {
             decodedPath = decodeURIComponent(rawPath);
         } catch {
             throw new UnprocessableEntityException(
-                'El EPUB contiene una referencia interna inválida.',
+                localizedError('READING_EPUB_INTERNAL_REFERENCE_INVALID'),
             );
         }
 
@@ -251,7 +252,7 @@ export class EpubContentProcessorService {
             normalized.startsWith('/')
         ) {
             throw new UnprocessableEntityException(
-                'El EPUB contiene una ruta interna inválida.',
+                localizedError('READING_EPUB_INTERNAL_PATH_INVALID'),
             );
         }
 

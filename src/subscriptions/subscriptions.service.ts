@@ -4,6 +4,7 @@ import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { In, MoreThan, Repository } from 'typeorm';
 import type { EntityManager } from 'typeorm';
 
+import { localizedError } from '../i18n/localized-error';
 import { User } from '../users/entities/user.entity';
 import { UserStatus } from '../users/enums/user-status.enum';
 import { UserRole } from '../users/enums/user-role.enum';
@@ -87,13 +88,13 @@ export class SubscriptionsService {
 
         if (!user) {
           throw new NotFoundException(
-            'El usuario no existe.',
+            localizedError('USER_NOT_FOUND'),
           );
         }
 
         if (user.status !== UserStatus.ACTIVE) {
           throw new ForbiddenException(
-            'La cuenta no está activa.',
+            localizedError('SUBSCRIPTION_ACCOUNT_INACTIVE'),
           );
         }
 
@@ -120,7 +121,7 @@ export class SubscriptionsService {
 
         if (existingSubscription) {
           throw new ConflictException(
-            'El usuario ya tiene una suscripción vigente o en proceso.',
+            localizedError('SUBSCRIPTION_ALREADY_EXISTS'),
           );
         }
 
@@ -164,7 +165,7 @@ export class SubscriptionsService {
 
     if (!Number.isSafeInteger(subscriptionId) || subscriptionId <= 0 || !externalSubscriptionReference?.trim()) {
       throw new BadRequestException(
-        'Los datos de la suscripción son inválidos.',
+        localizedError('SUBSCRIPTION_DATA_INVALID'),
       );
     }
 
@@ -178,7 +179,7 @@ export class SubscriptionsService {
 
     if (!subscription) {
       throw new NotFoundException(
-        'No se encontró la reserva de suscripción.',
+        localizedError('SUBSCRIPTION_RESERVATION_NOT_FOUND'),
       );
     }
 
@@ -193,13 +194,13 @@ export class SubscriptionsService {
 
     if (referenceSubscriptionId !== subscriptionId) {
       throw new ForbiddenException(
-        'La suscripción de PayPal no corresponde a la reserva solicitada.',
+        localizedError('SUBSCRIPTION_RESERVATION_MISMATCH'),
       );
     }
 
     if (externalSubscription.status !== 'APPROVED' && externalSubscription.status !== 'ACTIVE') {
       throw new ConflictException(
-        'La suscripción todavía no ha sido aprobada en PayPal.',
+        localizedError('SUBSCRIPTION_PAYPAL_NOT_APPROVED'),
       );
     }
 
@@ -252,7 +253,7 @@ export class SubscriptionsService {
           !billingInfo.nextBillingTime
         ) {
           throw new ServiceUnavailableException(
-            'No fue posible determinar la vigencia del pago confirmado.',
+            localizedError('SUBSCRIPTION_PAYMENT_PERIOD_UNAVAILABLE'),
           );
         }
 
@@ -268,7 +269,7 @@ export class SubscriptionsService {
           PAYMENT_TIME_TOLERANCE_MS
         ) {
           throw new ServiceUnavailableException(
-            'La información de facturación no corresponde al pago procesado.',
+            localizedError('SUBSCRIPTION_BILLING_PAYMENT_MISMATCH'),
           );
         }
 
@@ -320,7 +321,7 @@ export class SubscriptionsService {
 
     if (!amountParts) {
         throw new UnprocessableEntityException(
-            'El importe del pago confirmado es inválido.',
+            localizedError('SUBSCRIPTION_PAYMENT_AMOUNT_INVALID'),
         );
     }
 
@@ -334,7 +335,7 @@ export class SubscriptionsService {
         input.currencyCode !== PRO_CURRENCY_CODE
     ) {
         throw new UnprocessableEntityException(
-            'El pago no corresponde al importe del plan BiblioLink Pro.',
+            localizedError('SUBSCRIPTION_PAYMENT_PLAN_AMOUNT_MISMATCH'),
         );
     }
 
@@ -488,7 +489,7 @@ export class SubscriptionsService {
 
       if (!subscription) {
         throw new NotFoundException(
-          'No se encontró la suscripción asociada a la cancelación.',
+          localizedError('SUBSCRIPTION_CANCELLATION_NOT_FOUND'),
         );
       }
 
@@ -583,7 +584,7 @@ export class SubscriptionsService {
 
     if (subscriptionId === null) {
       throw new ForbiddenException(
-        'La notificación no contiene una referencia de reserva válida.',
+        localizedError('SUBSCRIPTION_WEBHOOK_RESERVATION_INVALID'),
       );
     }
 
@@ -616,7 +617,7 @@ export class SubscriptionsService {
 
         if (!subscription) {
           throw new NotFoundException(
-            'No se encontró la reserva de suscripción.',
+            localizedError('SUBSCRIPTION_RESERVATION_NOT_FOUND'),
           );
         }
 
@@ -627,7 +628,7 @@ export class SubscriptionsService {
           subscription.userId !== expectedUserId
         ) {
           throw new ForbiddenException(
-            'La suscripción no pertenece al usuario autenticado.',
+            localizedError('SUBSCRIPTION_OWNERSHIP_MISMATCH'),
           );
         }
 
@@ -643,7 +644,7 @@ export class SubscriptionsService {
 
         if (!validReference) {
           throw new ForbiddenException(
-            'La referencia de checkout no es válida.',
+            localizedError('SUBSCRIPTION_CHECKOUT_REFERENCE_INVALID'),
           );
         }
 
@@ -654,7 +655,7 @@ export class SubscriptionsService {
           externalSubscriptionReference
         ) {
           throw new ConflictException(
-            'La reserva ya está vinculada a otra suscripción.',
+            localizedError('SUBSCRIPTION_RESERVATION_ALREADY_LINKED'),
           );
         }
 
@@ -672,7 +673,7 @@ export class SubscriptionsService {
           SubscriptionStatus.PENDING
         ) {
           throw new ConflictException(
-            'La reserva ya no permite vincular una suscripción.',
+            localizedError('SUBSCRIPTION_RESERVATION_NOT_LINKABLE'),
           );
         }
 

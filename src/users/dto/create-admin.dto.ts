@@ -1,61 +1,54 @@
 import { Transform } from 'class-transformer';
 import { IsEmail, IsNotEmpty, IsOptional, IsString, MaxLength, } from 'class-validator';
 
+import { localizedValidation } from '../../i18n/localized-validation';
 import { normalizeLocalDate } from '../../common/dates/local-date';
 import { IsStrongPassword } from '../../common/decorators/is-strong-password.decorator';
 import { trimString } from '../../common/transformers/trim-string.transformer';
 
 export class CreateAdminDto {
     @Transform(trimString)
-    @IsString({ message: 'El nombre de usuario debe ser un texto.' })
-    @IsNotEmpty({ message: 'El nombre de usuario es obligatorio.' })
-    @MaxLength(25, {
-        message: 'El nombre de usuario no puede superar los 25 caracteres.',
-    })
+    @IsString(localizedValidation('VALIDATION_USERNAME_STRING'))
+    @IsNotEmpty(localizedValidation('VALIDATION_USERNAME_REQUIRED'))
+    @MaxLength(25, localizedValidation('VALIDATION_USERNAME_MAX_LENGTH', { max: 25 }))
     username!: string;
 
     @Transform(trimString)
-    @IsString({ message: 'El primer nombre debe ser un texto.' })
-    @IsNotEmpty({ message: 'El primer nombre es obligatorio.' })
-    @MaxLength(50, {
-        message: 'El primer nombre no puede superar los 50 caracteres.',
-    })
+    @IsString(localizedValidation('VALIDATION_FIRST_NAME_STRING'))
+    @IsNotEmpty(localizedValidation('VALIDATION_FIRST_NAME_REQUIRED'))
+    @MaxLength(50, localizedValidation('VALIDATION_FIRST_NAME_MAX_LENGTH', { max: 50 }))
     firstName!: string;
 
     @Transform(trimString)
     @IsOptional()
-    @IsString({ message: 'El segundo nombre debe ser un texto.' })
-    @IsNotEmpty({ message: 'El segundo nombre no puede estar vacío.' })
-    @MaxLength(50)
+    @IsString(localizedValidation('VALIDATION_MIDDLE_NAME_STRING'))
+    @IsNotEmpty(localizedValidation('VALIDATION_MIDDLE_NAME_REQUIRED'))
+    @MaxLength(50, localizedValidation('VALIDATION_MIDDLE_NAME_MAX_LENGTH', { max: 50 }))
     middleName?: string | null;
 
     @Transform(trimString)
-    @IsString({ message: 'El primer apellido debe ser un texto.' })
-    @IsNotEmpty({ message: 'El primer apellido es obligatorio.' })
-    @MaxLength(50)
+    @IsString(localizedValidation('VALIDATION_FIRST_SURNAME_STRING'))
+    @IsNotEmpty(localizedValidation('VALIDATION_FIRST_SURNAME_REQUIRED'))
+    @MaxLength(50, localizedValidation('VALIDATION_FIRST_SURNAME_MAX_LENGTH', { max: 50 }))
     firstSurname!: string;
 
     @Transform(trimString)
     @IsOptional()
-    @IsString({ message: 'El segundo apellido debe ser un texto.' })
-    @IsNotEmpty({ message: 'El segundo apellido no puede estar vacío.' })
-    @MaxLength(50)
+    @IsString(localizedValidation('VALIDATION_SECOND_SURNAME_STRING'))
+    @IsNotEmpty(localizedValidation('VALIDATION_SECOND_SURNAME_REQUIRED'))
+    @MaxLength(50, localizedValidation('VALIDATION_SECOND_SURNAME_MAX_LENGTH', { max: 50 }))
     secondSurname?: string | null;
 
     @Transform(({ value }) => normalizeLocalDate(value))
-    @IsString({
-        message: 'La fecha de nacimiento debe ser un texto.',
-    })
+    @IsString(localizedValidation('VALIDATION_BIRTH_DATE_STRING'))
     birthDate!: string;
 
     @Transform(trimString)
-    @IsEmail({}, {
-        message: 'El correo electrónico debe tener un formato válido.',
-    })
-    @MaxLength(254)
+    @IsEmail({}, localizedValidation('VALIDATION_EMAIL_FORMAT'))
+    @MaxLength(254, localizedValidation('VALIDATION_EMAIL_MAX_LENGTH', { max: 254 }))
     email!: string;
 
-    @IsString({ message: 'La contraseña debe ser un texto.' })
+    @IsString(localizedValidation('VALIDATION_PASSWORD_STRING'))
     @IsStrongPassword()
     password!: string;
 }

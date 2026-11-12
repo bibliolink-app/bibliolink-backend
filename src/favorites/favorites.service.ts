@@ -202,17 +202,29 @@ export class FavoritesService {
         return this.addFavorite(userId, book.bookId);
     }
 
-    // Quita una obra de los favoritos del usuario.
-    async removeFavorite(userId: number, bookId: number): Promise<void> {
+    // Quita una obra de los favoritos del usuario y devuelve su título para
+    // el mensaje de confirmación.
+    async removeFavorite(userId: number, bookId: number): Promise<{ title: string }> {
         this.logger.debug({ userId, bookId, operation: 'removeFavorite' }, 'Removing favorite');
+
+        // El título se lee antes de borrar. No se filtra por obras visibles:
+        // un favorito de una obra hoy oculta también se puede quitar.
+        const book = await this.favoritesRepository.manager.getRepository(Book).findOne({
+            select: { title: true },
+            where: { bookId },
+        });
 
         const result = await this.favoritesRepository.delete({ userId, bookId });
 
-        if (!result.affected) {
+        // Sin la obra no puede haber favorito (la clave foránea lo impide),
+        // así que ambos casos son "no está en tus favoritos".
+        if (!result.affected || !book) {
             throw new NotFoundException(localizedError('FAVORITE_NOT_FOUND'));
         }
 
         this.logger.info({ userId, bookId }, 'Favorite removed successfully');
+
+        return { title: book.title };
     }
 
     // Devuelve el progreso de lectura del usuario sobre una obra favorita, o

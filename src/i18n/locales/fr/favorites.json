@@ -2,6 +2,8 @@
     "FAVORITE_USER_NOT_FOUND": "L'utilisateur n'existe pas.",
     "FAVORITE_ALREADY_EXISTS": "Ce livre est déjà dans vos favoris.",
     "FAVORITE_NOT_FOUND": "Ce livre n'est pas dans vos favoris.",
+    "FAVORITE_ADDED": "Livre « {title} » ajouté aux favoris.",
+    "FAVORITE_REMOVED": "Livre « {title} » retiré des favoris.",
     "FAVORITE_LIMIT_REACHED_FREE": "Vous avez atteint la limite de {limit} favoris de l'offre gratuite. Passez à Premium pour en enregistrer jusqu'à {premiumLimit}.",
     "FAVORITE_LIMIT_REACHED_PREMIUM": "Vous avez atteint la limite de {limit} favoris de l'offre Premium.",
     "FAVORITE_PROGRESS_OUT_OF_RANGE": "La progression doit être comprise entre {min} et {max}.",

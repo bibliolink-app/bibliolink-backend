@@ -808,15 +808,18 @@ Todos requieren sesión iniciada (cookie `access_token`).
 - `GET /favorites` — favoritos del usuario, del más reciente al más antiguo,
   con el plan y los espacios que le quedan.
 - `POST /favorites` — agrega una obra que ya está en `books`. Body: `{ bookId }`.
+  Responde el favorito y un `message` de confirmación con el título de la
+  obra, en el idioma de `Accept-Language`.
 - `POST /favorites/external` — agrega una obra tal como viene de
   `GET /catalogs/search`. Body: `{ providerCode, externalReference }`. Si la
   obra ya está en `books` usa esa copia, sin consultar al proveedor; si no,
-  la importa primero.
+  la importa primero. Responde igual que `POST /favorites`.
 - `GET /favorites/books/:bookId/progress` — progreso de lectura del usuario
   sobre esa obra.
 - `PATCH /favorites/books/:bookId/progress` — guarda el progreso. Body:
   `{ progressPercent, readingLocation? }`.
-- `DELETE /favorites/books/:bookId` — quita una obra de favoritos. Responde `204`.
+- `DELETE /favorites/books/:bookId` — quita una obra de favoritos. Responde
+  `200` con `{ bookId, message }` (hasta el 11-nov-2026 era `204` sin cuerpo).
 
 #### Ejemplos de uso
 
@@ -854,9 +857,14 @@ curl -X POST http://localhost:3000/favorites/external \
     ],
     "createdAt": "2026-10-01T15:17:41.902Z",
     "updatedAt": "2026-10-01T15:17:41.902Z"
-  }
+  },
+  "message": "Libro \"Pride and Prejudice\" agregado a favoritos."
 }
 ```
+
+El `message` depende de `Accept-Language`: `Book "Pride and Prejudice" added
+to favorites.`, `Livre « Pride and Prejudice » ajouté aux favoris.`, `Livro
+"Pride and Prejudice" adicionado aos favoritos.`
 
 **Ver los favoritos y el límite**
 
@@ -882,7 +890,16 @@ igual que en `POST`.
 **Quitar un favorito**
 
 ```bash
-curl -X DELETE http://localhost:3000/favorites/books/63 -b "access_token=<token>"
+curl -X DELETE http://localhost:3000/favorites/books/63 \
+  -b "access_token=<token>" \
+  -H "Accept-Language: en"
+```
+
+```json
+{
+  "bookId": 63,
+  "message": "Book \"Pride and Prejudice\" removed from favorites."
+}
 ```
 
 ### Progreso de lectura

@@ -2,6 +2,8 @@
     "FAVORITE_USER_NOT_FOUND": "The user does not exist.",
     "FAVORITE_ALREADY_EXISTS": "This book is already in your favorites.",
     "FAVORITE_NOT_FOUND": "This book is not in your favorites.",
+    "FAVORITE_ADDED": "Book \"{title}\" added to favorites.",
+    "FAVORITE_REMOVED": "Book \"{title}\" removed from favorites.",
     "FAVORITE_LIMIT_REACHED_FREE": "You reached the limit of {limit} favorites on the free plan. Go Premium to save up to {premiumLimit}.",
     "FAVORITE_LIMIT_REACHED_PREMIUM": "You reached the limit of {limit} favorites on the Premium plan.",
     "FAVORITE_PROGRESS_OUT_OF_RANGE": "The progress must be between {min} and {max}.",
